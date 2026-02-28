@@ -91,11 +91,13 @@
         <div class="tab" onclick="switchTab('logs')">Logs</div>
         <div class="tab" onclick="switchTab('config')">Config</div>
         <div class="tab" onclick="switchTab('health')">Health History</div>
+        <div class="tab" onclick="switchTab('workspace')">Workspace</div>
       </div>
       <div id="tab-overview" class="tab-content active"></div>
       <div id="tab-logs" class="tab-content"></div>
       <div id="tab-config" class="tab-content"></div>
       <div id="tab-health" class="tab-content"></div>
+      <div id="tab-workspace" class="tab-content"></div>
     </div>
   </div>
 
@@ -236,6 +238,7 @@
       if (name === 'logs' && currentAgent) loadLogs(currentAgent.id);
       if (name === 'config' && currentAgent) loadConfig(currentAgent.id);
       if (name === 'health' && currentAgent) loadHealth(currentAgent.id);
+      if (name === 'workspace' && currentAgent) loadWorkspace(currentAgent.id);
     }
 
     async function loadOverview(agent) {
@@ -369,6 +372,90 @@
     async function loadDiagnose(id) {
       switchTab('overview');
       if (currentAgent) loadOverview(currentAgent);
+    }
+
+    async function loadWorkspace(id) {
+      var el = document.getElementById('tab-workspace');
+      el.innerHTML = '<div class="loading">Loading workspace...</div>';
+      try {
+        var r = await fetch(API + '/agents/' + id + '/workspace');
+        var data = await r.json();
+        if (data.error) { el.innerHTML = '<p style="color:#f85149">Error: ' + data.error + '</p>'; return; }
+
+        var html = '';
+
+        // Identity & Soul
+        if (data.identity) {
+          html += '<div class="card" style="margin-bottom:16px"><h3>Identity</h3>';
+          html += '<pre style="white-space:pre-wrap;font-size:13px;color:#c9d1d9;margin-top:8px">' + escapeHtml(data.identity) + '</pre></div>';
+        }
+        if (data.soul) {
+          html += '<div class="card" style="margin-bottom:16px"><h3>Soul</h3>';
+          html += '<pre style="white-space:pre-wrap;font-size:13px;color:#c9d1d9;margin-top:8px">' + escapeHtml(data.soul) + '</pre></div>';
+        }
+
+        // Skills
+        html += '<div class="card" style="margin-bottom:16px"><h3>Skills (' + data.skills.length + ')</h3>';
+        if (data.skills.length === 0) {
+          html += '<p style="color:#8b949e">No skills installed</p>';
+        } else {
+          html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+          for (var s of data.skills) {
+            html += '<span class="pill" style="background:#0d3117;color:#3fb950;padding:4px 10px">' + escapeHtml(s) + '</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // Knowledge Base
+        if (data.knowledgeBase.length > 0) {
+          html += '<div class="card" style="margin-bottom:16px"><h3>Knowledge Base (' + data.knowledgeBase.length + ' files)</h3>';
+          html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">';
+          for (var kb of data.knowledgeBase) {
+            html += '<span class="tag">' + escapeHtml(kb) + '</span>';
+          }
+          html += '</div></div>';
+        }
+
+        // Memory files
+        html += '<div class="card" style="margin-bottom:16px"><h3>Memory Files (' + data.memoryFiles.length + ')</h3>';
+        if (data.memoryFiles.length === 0) {
+          html += '<p style="color:#8b949e">No memory files</p>';
+        } else {
+          html += '<table style="margin-top:8px"><thead><tr><th>Size</th><th>File</th></tr></thead><tbody>';
+          for (var mf of data.memoryFiles) {
+            var parts = mf.trim().split(/\s+/);
+            var size = parts[0] || '';
+            var fname = parts.slice(1).join(' ').replace(/.*\/workspace\//, '');
+            html += '<tr><td style="color:#8b949e;white-space:nowrap">' + escapeHtml(size) + '</td><td>' + escapeHtml(fname) + '</td></tr>';
+          }
+          html += '</tbody></table>';
+        }
+        html += '</div>';
+
+        // MEMORY.md preview
+        if (data.memoryMdPreview) {
+          html += '<div class="card" style="margin-bottom:16px"><h3>MEMORY.md (preview, secrets redacted)</h3>';
+          html += '<pre style="white-space:pre-wrap;font-size:12px;color:#c9d1d9;margin-top:8px;max-height:300px;overflow-y:auto">' + escapeHtml(data.memoryMdPreview) + '</pre></div>';
+        }
+
+        // File tree
+        html += '<details style="margin-top:8px"><summary style="cursor:pointer;color:#58a6ff;font-size:13px">Workspace file tree (' + data.tree.length + ' items)</summary>';
+        html += '<div class="log-box" style="margin-top:8px;max-height:400px">';
+        for (var f of data.tree) {
+          var display = f.replace(/.*\/workspace\//, '');
+          var indent = (display.match(/\//g) || []).length;
+          var name = display.split('/').pop();
+          var isDir = !name.includes('.');
+          var icon = isDir ? '\ud83d\udcc1' : '\ud83d\udcc4';
+          html += '<div style="padding-left:' + (indent * 16) + 'px">' + icon + ' ' + escapeHtml(name || display) + '</div>';
+        }
+        html += '</div></details>';
+
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = '<p style="color:#f85149">Failed: ' + err.message + '</p>';
+      }
     }
 
     function escapeHtml(text) {

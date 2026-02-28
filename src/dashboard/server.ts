@@ -234,7 +234,51 @@ export async function startDashboard(port: number): Promise<void> {
           (e: { detail?: { agentId?: string } }) => e.detail?.agentId === id,
         );
         json(res, agentEntries);
-      } else {
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/workspace') && req.method === 'GET') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        const { SshClient } = await import('../ssh/index.js');
+        const ssh = new SshClient(agent.sshKeyPath);
+        try {
+          await ssh.connect(agent);
+          const ws = '~/.openclaw/workspace';
+
+          const tree = await ssh.exec(
+            "find " + ws + " -maxdepth 3 ! -path '*/node_modules/*' ! -path '*/.git/*' ! -name '.env*' ! -path '*/credentials/*' ! -name '*.key' ! -name '*.pem' 2>/dev/null | sort | head -200"
+          );
+          const skills = await ssh.exec("ls -1 " + ws + "/skills/ 2>/dev/null || echo ''");
+          const skillConfig = await ssh.exec(
+            "source ~/.nvm/nvm.sh 2>/dev/null; node -e \"try{const c=JSON.parse(require('fs').readFileSync(require('os').homedir()+'/.openclaw/openclaw.json'));(c.skills?.entries||[]).forEach(s=>console.log(s.name||'?'))}catch{}\" 2>/dev/null || echo ''"
+          );
+          const memoryFiles = await ssh.exec(
+            "find " + ws + "/memory -type f \\( -name '*.md' -o -name '*.json' \\) 2>/dev/null | while read f; do sz=$(du -h \"$f\" | cut -f1); echo \"$sz $f\"; done | sort -k2 | head -100"
+          );
+          const soul = await ssh.exec("cat " + ws + "/SOUL.md 2>/dev/null | head -50 || echo ''");
+          const identity = await ssh.exec("cat " + ws + "/IDENTITY.md 2>/dev/null | head -20 || echo ''");
+          const memoryMd = await ssh.exec("cat " + ws + "/MEMORY.md 2>/dev/null | head -30 || echo ''");
+          const kbFiles = await ssh.exec("ls -1 " + ws + "/knowledge-base/ 2>/dev/null | head -50 || echo ''");
+
+          const redact = (s: string) => s.replace(/(api.?key|token|password|secret|auth)[^\n]*[:=][^\n]*/gi, '$1: [REDACTED]');
+
+          json(res, {
+            tree: tree.stdout.trim().split('\n').filter(Boolean),
+            skills: [...new Set([
+              ...skills.stdout.trim().split('\n').filter(Boolean),
+              ...skillConfig.stdout.trim().split('\n').filter(Boolean),
+            ])],
+            memoryFiles: memoryFiles.stdout.trim().split('\n').filter(Boolean),
+            soul: soul.stdout,
+            identity: identity.stdout,
+            memoryMdPreview: redact(memoryMd.stdout),
+            knowledgeBase: kbFiles.stdout.trim().split('\n').filter(Boolean),
+          });
+        } catch (err) {
+          json(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+        } finally {
+          ssh.disconnect();
+        }
+            } else {
         // Try static files
         const served = await serveStatic(res, staticDir, path);
         if (!served) {
