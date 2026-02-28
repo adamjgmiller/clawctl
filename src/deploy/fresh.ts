@@ -90,9 +90,9 @@ export async function freshDeploy(
       configPath: input.configPath,
       envPath: input.envPath,
     });
-    await ssh.exec('mkdir -p ~/openclaw');
-    await ssh.putContent(templates.openclawJson, '/home/' + input.sshUser + '/openclaw/openclaw.json');
-    await ssh.putContent(templates.envFile, '/home/' + input.sshUser + '/openclaw/.env');
+    await ssh.exec('mkdir -p ~/.openclaw');
+    await ssh.putContent(templates.openclawJson, '/home/' + input.sshUser + '/.openclaw/openclaw.json');
+    await ssh.putContent(templates.envFile, '/home/' + input.sshUser + '/.openclaw/.env');
 
     // 6. Set up systemd + start service
     callbacks.onStep('Setting up systemd service...');
