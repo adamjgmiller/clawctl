@@ -98,6 +98,49 @@ export function createAgentsCommand(): Command {
     );
 
   agents
+    .command('info')
+    .description('Show detailed info about an agent')
+    .argument('<id>', 'Agent ID')
+    .option('--json', 'Output as JSON')
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const store = createStore();
+      const agent = await store.get(id);
+      if (!agent) {
+        console.error(`Agent ${id} not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(agent, null, 2));
+        return;
+      }
+
+      const labelWidth = 16;
+      const fmt = (label: string, value: string) =>
+        `${(label + ':').padEnd(labelWidth)} ${value}`;
+
+      const lines = [
+        fmt('ID', agent.id),
+        fmt('Name', agent.name),
+        fmt('Host', agent.host),
+        fmt('Tailscale IP', agent.tailscaleIp),
+        fmt('User', agent.user),
+        fmt('Role', agent.role),
+        fmt('Status', agent.status),
+        fmt('Tags', agent.tags.length > 0 ? agent.tags.join(', ') : '(none)'),
+      ];
+
+      if (agent.awsInstanceId) lines.push(fmt('AWS Instance', agent.awsInstanceId));
+      if (agent.awsRegion) lines.push(fmt('AWS Region', agent.awsRegion));
+
+      lines.push(fmt('Created', agent.createdAt));
+      lines.push(fmt('Updated', agent.updatedAt));
+
+      console.log(lines.join('\n'));
+    });
+
+  agents
     .command('remove')
     .description('Remove an agent by ID')
     .argument('<id>', 'Agent ID')
