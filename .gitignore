@@ -1,4 +1,5 @@
 dist/
+!dashboard/dist/
 
 # Logs
 logs
