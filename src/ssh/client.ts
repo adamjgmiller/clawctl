@@ -27,6 +27,9 @@ export class SshClient {
   }
 
   async connect(agent: Agent): Promise<void> {
+    if (agent.sshKeyPath) {
+      this.keyPath = agent.sshKeyPath;
+    }
     await this.connectTo(agent.tailscaleIp, agent.user);
   }
 

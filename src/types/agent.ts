@@ -19,6 +19,7 @@ export const AgentSchema = z.object({
   role: AgentRole,
   status: AgentStatus.default('unknown'),
   tags: z.array(z.string()).default([]),
+  sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
   createdAt: z.string().datetime(),
@@ -34,6 +35,7 @@ export const CreateAgentInputSchema = z.object({
   user: z.string().default('openclaw'),
   role: AgentRole,
   tags: z.array(z.string()).default([]),
+  sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
 });
@@ -48,6 +50,7 @@ export const UpdateAgentInputSchema = z.object({
   role: AgentRole.optional(),
   status: AgentStatus.optional(),
   tags: z.array(z.string()).optional(),
+  sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
 });

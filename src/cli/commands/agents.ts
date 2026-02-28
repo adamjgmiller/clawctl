@@ -54,6 +54,7 @@ export function createAgentsCommand(): Command {
     .requiredOption('--role <role>', 'Agent role (orchestrator, worker, monitor, gateway)')
     .option('--user <user>', 'SSH user', 'openclaw')
     .option('--tags <tags>', 'Comma-separated tags')
+    .option('--ssh-key <path>', 'SSH private key path for this agent')
     .option('--aws-instance-id <id>', 'AWS EC2 instance ID')
     .option('--aws-region <region>', 'AWS region')
     .action(
@@ -64,6 +65,7 @@ export function createAgentsCommand(): Command {
         role: string;
         user: string;
         tags?: string;
+        sshKey?: string;
         awsInstanceId?: string;
         awsRegion?: string;
       }) => {
@@ -76,6 +78,7 @@ export function createAgentsCommand(): Command {
             role: opts.role,
             user: opts.user,
             tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+            sshKeyPath: opts.sshKey,
             awsInstanceId: opts.awsInstanceId,
             awsRegion: opts.awsRegion,
           });
@@ -132,6 +135,7 @@ export function createAgentsCommand(): Command {
         fmt('Tags', agent.tags.length > 0 ? agent.tags.join(', ') : '(none)'),
       ];
 
+      if (agent.sshKeyPath) lines.push(fmt('SSH Key', agent.sshKeyPath));
       if (agent.awsInstanceId) lines.push(fmt('AWS Instance', agent.awsInstanceId));
       if (agent.awsRegion) lines.push(fmt('AWS Region', agent.awsRegion));
 
@@ -228,9 +232,10 @@ export function createAgentsCommand(): Command {
     .description('Check agent health via SSH')
     .argument('[id]', 'Agent ID (omit for all)')
     .option('--json', 'Output as JSON')
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
+    .option('--ssh-key <path>', 'SSH private key path (overrides agent/config default)')
+    .action(async (id: string | undefined, opts: { json?: boolean; sshKey?: string }) => {
       const store = createStore();
-      let agents;
+      let agentsList;
 
       if (id) {
         const agent = await store.get(id);
@@ -239,20 +244,25 @@ export function createAgentsCommand(): Command {
           process.exitCode = 1;
           return;
         }
-        agents = [agent];
+        agentsList = [agent];
       } else {
-        agents = await store.list();
-        if (agents.length === 0) {
+        agentsList = await store.list();
+        if (agentsList.length === 0) {
           console.log('No agents registered.');
           return;
         }
       }
 
-      const results = await Promise.allSettled(agents.map((a) => getAgentStatus(a)));
+      // If --ssh-key is passed, override per-agent sshKeyPath for this check
+      if (opts.sshKey) {
+        agentsList = agentsList.map((a) => ({ ...a, sshKeyPath: opts.sshKey }));
+      }
+
+      const results = await Promise.allSettled(agentsList.map((a) => getAgentStatus(a)));
       const statuses = results.map((r, i) =>
         r.status === 'fulfilled'
           ? r.value
-          : { agent: agents[i], reachable: false as const, error: String(r.reason) },
+          : { agent: agentsList[i], reachable: false as const, error: String(r.reason) },
       );
 
       if (opts.json) {
