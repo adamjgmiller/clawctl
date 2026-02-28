@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { loadConfig, saveConfig, getClawctlDir } from '../../config/index.js';
 import { ConfigSchema } from '../../types/index.js';
 import type { Config } from '../../types/index.js';
+import { seedDefaultTemplates } from '../../deploy/index.js';
 
 function prompt(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
   return new Promise((resolve) => {
@@ -71,6 +72,15 @@ export function createInitCommand(): Command {
         await mkdir(join(clawctlDir, 'templates'), { recursive: true });
 
         await saveConfig(config);
+
+        // Seed default deploy templates if they don't exist
+        const seeded = await seedDefaultTemplates();
+        if (seeded.length > 0) {
+          console.log(`\nDefault templates created:`);
+          for (const path of seeded) {
+            console.log(`  ${path}`);
+          }
+        }
 
         console.log(`\nConfig written to ${configPath}`);
         console.log(`Templates directory: ${join(clawctlDir, 'templates')}`);
