@@ -242,7 +242,8 @@ export function createAgentsCommand(): Command {
     .argument('[id]', 'Agent ID (omit for all)')
     .option('--json', 'Output as JSON')
     .option('--ssh-key <path>', 'SSH private key path (overrides agent/config default)')
-    .action(async (id: string | undefined, opts: { json?: boolean; sshKey?: string }) => {
+    .option('--verbose', 'Show detailed openclaw status (version, uptime, model, channels)')
+    .action(async (id: string | undefined, opts: { json?: boolean; sshKey?: string; verbose?: boolean }) => {
       const store = createStore();
       let agentsList;
 
@@ -289,6 +290,31 @@ export function createAgentsCommand(): Command {
 
       if (opts.json) {
         console.log(JSON.stringify(statuses, null, 2));
+      } else if (opts.verbose) {
+        for (const s of statuses) {
+          console.log(chalk.bold(`--- ${s.agent.name} (${s.agent.role}) ---`));
+          console.log(`  Host:         ${s.agent.host}`);
+          console.log(`  Tailscale IP: ${s.agent.tailscaleIp}`);
+          console.log(`  Reachable:    ${s.reachable ? chalk.green('yes') : chalk.red('no')}`);
+          if (s.openclawStatus) {
+            const st = s.openclawStatus;
+            if (st.version) console.log(`  Version:      ${st.version}`);
+            if (st.uptime) console.log(`  Uptime:       ${st.uptime}`);
+            if (st.model) console.log(`  Model:        ${st.model}`);
+            if (st.channels) console.log(`  Channels:     ${Array.isArray(st.channels) ? (st.channels as string[]).join(', ') : st.channels}`);
+            // Print any other fields
+            for (const [k, v] of Object.entries(st)) {
+              if (!['version', 'uptime', 'model', 'channels'].includes(k)) {
+                console.log(`  ${k.padEnd(12)}  ${String(v)}`);
+              }
+            }
+          } else if (s.raw) {
+            console.log(`  Output:       ${s.raw}`);
+          } else if (s.error) {
+            console.log(`  Error:        ${chalk.red(s.error)}`);
+          }
+          console.log('');
+        }
       } else {
         console.log(formatStatusTable(statuses));
       }
