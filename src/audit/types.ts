@@ -23,6 +23,10 @@ export const AuditAction = z.enum([
   'policy.check',
   'agent.exec',
   'agent.restart',
+  'task.create',
+  'task.dispatch',
+  'task.complete',
+  'task.fail',
 ]);
 
 export type AuditAction = z.infer<typeof AuditAction>;

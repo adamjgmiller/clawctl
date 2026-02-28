@@ -132,3 +132,33 @@ Tasks are routed based on:
 2. **Text match** — task description mentions agent capabilities (5 pts each)
 3. **Agent status** — online agents preferred (3 pts)
 4. **Session key** — agents with direct messaging get a bonus (2 pts)
+
+### Task Delegation
+
+```bash
+clawctl tasks create --title "Title" --description "Instructions" --capabilities "cap1,cap2"
+clawctl tasks create --title "Title" --description "Instructions" --dispatch  # Auto-dispatch via SSH
+clawctl tasks create --title "Title" --description "Instructions" --assign cs-bot --dispatch
+clawctl tasks list                     # List all tasks
+clawctl tasks list --status running    # Filter by status
+clawctl tasks info <id>                # Full task details
+clawctl tasks route --title "Title" --capabilities "cap1"  # Dry run: who would get this?
+clawctl tasks dispatch <id>            # Send assigned task to worker via SSH
+clawctl tasks poll <id>                # Check if worker finished
+clawctl tasks poll <id> --wait 120     # Poll every 10s for up to 2 min
+clawctl tasks complete <id> --result "Done"   # Manually mark done
+clawctl tasks fail <id> --error "Reason"      # Manually mark failed
+clawctl tasks cancel <id>              # Cancel a task
+```
+
+#### Direct Messaging (sessions_send)
+
+For real-time task delegation, use `sessions_send` to message workers directly instead of SSH file drops:
+
+```
+sessions_send(sessionKey: "<worker-session-key>", message: "Please do X and report back")
+```
+
+The worker's session key is stored in the agent registry (`clawctl agents info <name>` shows it). This is the preferred path when the orchestrator is running as an active agent, since the worker can respond conversationally and ask clarifying questions.
+
+The SSH dispatch path (`tasks dispatch`) is for CLI use or when you need fire-and-forget delegation.

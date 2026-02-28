@@ -99,3 +99,19 @@ The dashboard is a first-class feature, not an afterthought. The model is: **int
 - **openclaw-fleet** (vibewrk) — declarative YAML manifests, drift detection. Ops focused.
 - **openclaw-mission-control** (abhi1693) — orchestration dashboard. UI focused.
 - **Gap**: None have agent intelligence + secrets vault + policy enforcement.
+## Phase 6: Task Delegation
+Orchestrator-to-worker task delegation — create tasks, route them by capability, dispatch to workers, track completion.
+- [x] Agent capabilities field (`--capabilities`, `--description`, `--session-key` on add/update)
+- [x] Task types + store (JSON-backed, `~/.clawctl/tasks.json`)
+- [x] Capability-based routing engine (score: capability match 10pts, text match 5pts, online 3pts, session key 2pts)
+- [x] CLI: `tasks create`, `tasks list`, `tasks info`, `tasks route` (dry run), `tasks complete/fail/cancel`
+- [x] SSH dispatch engine — writes task file to worker's `memory/tasks/<id>.md`, worker writes `.result.md` or `.error.md`
+- [x] `tasks dispatch <id>` — send assigned task to worker via SSH
+- [x] `tasks poll <id> [--wait N]` — check worker for result/error files, optional polling loop
+- [x] `--dispatch` flag on `tasks create` — auto-dispatch after routing
+- [x] Dashboard API: `GET /api/tasks` endpoint
+- [x] Audit integration: `task.create`, `task.dispatch`, `task.complete`, `task.fail` actions
+- [ ] `sessions_send` dispatch path — orchestrator agent sends task conversationally (vs SSH file drop)
+- [ ] Worker HEARTBEAT.md template — auto-check `memory/tasks/` for new tasks on heartbeat
+- [ ] Task timeout enforcement — mark overdue tasks as failed
+- [ ] Dashboard tasks tab — show task list with status/routing in the web UI

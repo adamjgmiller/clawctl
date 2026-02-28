@@ -10,6 +10,7 @@ import { JsonAgentStore } from '../registry/index.js';
 import { JsonAuditStore } from '../audit/json-store.js';
 import type { AuditAction } from '../audit/types.js';
 import { PolicyEngine } from '../policy/index.js';
+import { TaskStore } from '../tasks/index.js';
 import { attachWebSocket } from './ws.js';
 
 const MIME_TYPES: Record<string, string> = {
@@ -87,6 +88,11 @@ export async function startDashboard(port: number): Promise<void> {
           limit,
         });
         json(res, entries);
+      } else if (path === '/api/tasks') {
+        const taskStore = new TaskStore();
+        const status = url.searchParams.get('status') ?? undefined;
+        const taskList = await taskStore.list({ status: status as any });
+        json(res, taskList);
       } else if (path === '/api/policy') {
         const engine = await PolicyEngine.load();
         json(res, engine.getPolicy());
