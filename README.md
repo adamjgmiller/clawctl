@@ -1,5 +1,7 @@
 # clawctl
 
+> ⚠️ **Early development — not production-ready.** This project is actively being built. Commands may change, features are incomplete, and things will break. If you're here to explore or contribute, welcome. If you need something stable, check back later.
+
 Agent-native control plane for managing [OpenClaw](https://openclaw.ai) fleets. Not just infra tooling — an intelligence layer that reasons about fleet state, diagnoses issues, enforces policy, and takes corrective action with human-in-the-loop for sensitive operations.
 
 **License:** AGPL-3.0 — open core, dual-licensed for hosted deployments.
