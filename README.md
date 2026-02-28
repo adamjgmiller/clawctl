@@ -30,9 +30,17 @@ npm run build
 npm link  # makes `clawctl` available globally
 ```
 
+### Initialize
+
+```bash
+clawctl init
+```
+
+Interactively sets up `~/.clawctl/` with config and templates directory. Prompts for AWS region, SSH key path, default SSH user, and AWS profile. If already initialized, shows current config and offers to update.
+
 ### Configure
 
-Configuration lives at `~/.clawctl/config.json` and is auto-created on first run:
+Configuration lives at `~/.clawctl/config.json` and is auto-created on first run (or via `clawctl init`):
 
 ```json
 {
@@ -58,21 +66,33 @@ clawctl agents add \
 
 ```bash
 clawctl agents list
-clawctl agents status          # SSH health check on all agents
-clawctl agents status <id>     # Check a specific agent
-clawctl agents status --json   # JSON output
+clawctl agents status              # SSH health check on all agents
+clawctl agents status <id>         # Check a specific agent
+clawctl agents status --verbose    # Detailed output (version, uptime, model, channels)
+clawctl agents status --json       # JSON output
 ```
 
 ## CLI Reference
 
+### init
+
 ```
-clawctl agents list [--json]                    List registered agents
-clawctl agents add --name --host --tailscale-ip --role [options]   Register an agent
-clawctl agents remove <id>                      Remove an agent
-clawctl agents status [id] [--json]             Check agent health via SSH
+clawctl init    Interactive setup of ~/.clawctl/ directory and config
 ```
 
-### agents add options
+### agents
+
+```
+clawctl agents list [--json]                                       List registered agents
+clawctl agents add --name --host --tailscale-ip --role [options]   Register an agent
+clawctl agents remove <id>                                         Remove an agent
+clawctl agents info <id> [--json]                                  Show detailed agent info
+clawctl agents update <id> [--name] [--host] [--role] [...]        Update agent fields
+clawctl agents status [id] [--json] [--verbose] [--ssh-key]        Check agent health via SSH
+clawctl agents logs <id> [--lines N] [--follow]                    Tail openclaw gateway logs
+```
+
+#### agents add options
 
 | Flag | Required | Description |
 |------|----------|-------------|
@@ -82,8 +102,76 @@ clawctl agents status [id] [--json]             Check agent health via SSH
 | `--role` | yes | `orchestrator`, `worker`, `monitor`, or `gateway` |
 | `--user` | no | SSH user (default: `openclaw`) |
 | `--tags` | no | Comma-separated tags |
+| `--ssh-key` | no | SSH private key path for this agent |
 | `--aws-instance-id` | no | EC2 instance ID |
 | `--aws-region` | no | AWS region |
+
+#### agents info
+
+Show all stored fields for an agent:
+
+```bash
+clawctl agents info <id>          # Human-readable output
+clawctl agents info <id> --json   # JSON output
+```
+
+#### agents update
+
+Update one or more fields on an existing agent:
+
+```bash
+clawctl agents update <id> --name new-name --role gateway --tags "prod,us-east"
+```
+
+Supported flags: `--name`, `--host`, `--tailscale-ip`, `--role`, `--user`, `--tags`.
+
+#### agents status
+
+Health checks persist the result (online/offline/degraded) back to the registry, so `agents list` reflects last known state.
+
+```bash
+clawctl agents status                  # Check all agents
+clawctl agents status <id>             # Check one agent
+clawctl agents status --verbose        # Detailed: version, uptime, model, channels
+clawctl agents status --ssh-key ~/.ssh/other_key   # Override SSH key
+```
+
+#### agents logs
+
+Tail the openclaw gateway log from `/tmp/openclaw/` on the agent's host:
+
+```bash
+clawctl agents logs <id>               # Last 50 lines
+clawctl agents logs <id> --lines 100   # Last 100 lines
+clawctl agents logs <id> --follow      # Live tail (Ctrl+C to stop)
+```
+
+### network
+
+Requires `TAILSCALE_API_KEY` and `TAILSCALE_TAILNET` environment variables.
+
+```
+clawctl network status [--json] [--tag <tag>]    List tag:clawctl devices (default)
+clawctl network list [--json]                    List ALL tailnet devices
+clawctl network tag <device-id> <tag>            Add a tag to a device
+```
+
+#### network list
+
+List every device on your tailnet:
+
+```bash
+clawctl network list           # Table output
+clawctl network list --json    # JSON output
+```
+
+#### network tag
+
+Add a Tailscale tag to a device (e.g., to bring it into the clawctl fleet):
+
+```bash
+clawctl network tag <device-id> clawctl
+```
 
 ## Development
 
@@ -100,7 +188,7 @@ npm run format:check             # Prettier (check)
 
 See [PLAN.md](./PLAN.md) for the full roadmap:
 
-- **Phase 1** (current): Foundation — registry, CLI, SSH, health checks, AWS setup
+- **Phase 1** (current): Foundation — registry, CLI, SSH, health checks, AWS setup, Tailscale integration
 - **Phase 2**: Config & Secrets — vault, config sync, drift detection
 - **Phase 3**: Intelligence Layer — reasoning agent, policy engine, audit log
 - **Phase 4**: Web Dashboard — fleet overview, agent detail, audit viewer
