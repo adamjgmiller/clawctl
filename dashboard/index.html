@@ -121,6 +121,8 @@
         '<div class="agent-row"><span class="label">Tailscale IP</span><span>' + a.tailscaleIp + '</span></div>' +
         '<div class="agent-row"><span class="label">User</span><span>' + a.user + '</span></div>' +
         '<div class="agent-row"><span class="label">Tags</span><span>' + tags + '</span></div>' +
+        '<div class="agent-row"><span class="label">Capabilities</span><span>' + ((a.capabilities || []).length > 0 ? (a.capabilities || []).map(function(c) { return '<span class="pill" style="background:#0d3117;color:#3fb950;font-size:11px;padding:1px 6px">' + c + '</span>'; }).join(' ') : '<span style="color:#8b949e">none</span>') + '</span></div>' +
+        (a.description ? '<div class="agent-row"><span class="label">Description</span><span style="color:#8b949e;font-size:13px">' + a.description + '</span></div>' : '') +
         '<div style="margin-top:12px;display:flex;gap:8px">' +
           '<button class="btn" onclick="event.stopPropagation();showAgent(\'' + a.id + '\')">&#x1f50d; Details</button>' +
           '<button class="btn" onclick="event.stopPropagation();restartAgent(\'' + a.id + '\',\'' + a.name + '\')">&#x1f504; Restart</button>' +
@@ -216,7 +218,9 @@
       document.getElementById('detail-header').innerHTML =
         '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0">' +
           '<div><h2 style="margin-bottom:4px">' + agent.name + ' <span class="' + statusClass(agent.status) + '">' + agent.status + '</span></h2>' +
-          '<span style="color:#8b949e">' + agent.role + ' &middot; ' + agent.tailscaleIp + ' &middot; ' + agent.user + '</span></div>' +
+          '<span style="color:#8b949e">' + agent.role + ' &middot; ' + agent.tailscaleIp + ' &middot; ' + agent.user + '</span>' +
+          ((agent.capabilities || []).length > 0 ? '<div style="margin-top:4px">' + agent.capabilities.map(function(c) { return '<span class="pill" style="background:#0d3117;color:#3fb950;font-size:11px;padding:1px 6px;margin-right:4px">' + c + '</span>'; }).join('') + '</div>' : '') +
+          '</div>' +
           '<div style="display:flex;gap:8px">' +
             '<button class="btn" onclick="restartAgent(\'' + agent.id + '\',\'' + agent.name + '\')">&#x1f504; Restart</button>' +
             '<button class="btn" onclick="loadDiagnose(\'' + agent.id + '\')">&#x1f9ea; Diagnose</button>' +
@@ -261,6 +265,8 @@
         var fields = [
           ['ID', agent.id], ['Name', agent.name], ['Host', agent.host],
           ['Tailscale IP', agent.tailscaleIp], ['User', agent.user], ['Role', agent.role],
+          ['Capabilities', (agent.capabilities || []).join(', ') || 'none'],
+          ['Description', agent.description || 'none'],
           ['Created', new Date(agent.createdAt).toLocaleString()],
           ['Updated', new Date(agent.updatedAt).toLocaleString()],
         ];
