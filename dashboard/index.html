@@ -72,7 +72,11 @@
         <div class="agent-row"><span class="label">Tailscale IP</span><span>${a.tailscaleIp}</span></div>
         <div class="agent-row"><span class="label">User</span><span>${a.user}</span></div>
         <div class="agent-row"><span class="label">Tags</span><span>${tags}</span></div>
-      </div>`;
+        <div style="margin-top:12px;display:flex;gap:8px">
+          <button onclick="restartAgent('${a.id}','${a.name}')" style="background:#21262d;color:#e1e4e8;border:1px solid #30363d;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">🔄 Restart</button>
+          <button onclick="diagnoseAgent('${a.id}','${a.name}')" style="background:#21262d;color:#e1e4e8;border:1px solid #30363d;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">🔍 Diagnose</button>
+        </div>
+      </div>\`;
     }
 
     function renderPolicy(pol) {
@@ -95,6 +99,27 @@
         const detail = e.meta?.error || (e.meta?.detail ? JSON.stringify(e.meta.detail).slice(0,80) : '-');
         return `<tr><td>${t}</td><td>${e.action}</td><td>${agent}</td><td>${detail}</td></tr>`;
       }).join('');
+    }
+
+    async function restartAgent(id, name) {
+      if (!confirm('Restart gateway on ' + name + '?')) return;
+      try {
+        const r = await fetch(API + '/agents/' + id + '/restart', { method: 'POST' });
+        const data = await r.json();
+        if (data.success) { alert('Restarted ' + name); load(); }
+        else alert('Failed: ' + (data.error || 'unknown'));
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function diagnoseAgent(id, name) {
+      try {
+        const r = await fetch(API + '/agents/' + id + '/diagnose', { method: 'POST' });
+        const data = await r.json();
+        if (data.error) { alert('Error: ' + data.error); return; }
+        let msg = 'Diagnose: ' + name + '\n\n';
+        for (const c of data.checks) msg += c.name + ': ' + c.stdout + '\n';
+        alert(msg);
+      } catch (e) { alert('Error: ' + e.message); }
     }
 
     async function load() {

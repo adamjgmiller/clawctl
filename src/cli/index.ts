@@ -10,6 +10,7 @@ import { createPolicyCommand } from './commands/policy.js';
 import { createDashboardCommand } from './commands/dashboard.js';
 import { createAlertsCommand } from './commands/alerts.js';
 import { createWatchCommand } from './commands/watch.js';
+import { createUpdateCommand } from './commands/update.js';
 
 const program = new Command('clawctl')
   .description('Agent-native control plane for managing OpenClaw fleets')
@@ -24,5 +25,6 @@ program.addCommand(createPolicyCommand());
 program.addCommand(createDashboardCommand());
 program.addCommand(createAlertsCommand());
 program.addCommand(createWatchCommand());
+program.addCommand(createUpdateCommand());
 
 await program.parseAsync();

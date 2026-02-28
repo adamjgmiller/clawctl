@@ -517,6 +517,62 @@ export function createAgentsCommand(): Command {
       }
     });
 
+
+  agents
+    .command('exec')
+    .description('Run a command on an agent via SSH (or SSM with --ssm)')
+    .argument('<id>', 'Agent ID')
+    .argument('<command...>', 'Command to run')
+    .option('--ssm', 'Use AWS SSM instead of SSH')
+    .option('--ssh-key <path>', 'SSH private key path')
+    .action(async (id: string, command: string[], opts: { ssm?: boolean; sshKey?: string }) => {
+      const store = createStore();
+      const agent = await store.get(id);
+      if (!agent) {
+        console.error(`Agent ${id} not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const cmd = command.join(' ');
+
+      if (opts.ssm) {
+        if (!agent.awsInstanceId) {
+          console.error(`Agent ${agent.name} has no AWS instance ID. Use --ssm only for EC2 agents.`);
+          process.exitCode = 1;
+          return;
+        }
+        const { SsmManager } = await import('../../ssm/index.js');
+        const ssm = new SsmManager(agent.awsRegion);
+        console.log(chalk.dim(`[SSM] ${agent.name} (${agent.awsInstanceId}): ${cmd}`));
+        try {
+          const result = await ssm.exec(agent.awsInstanceId, cmd);
+          if (result.stdout) process.stdout.write(result.stdout);
+          if (result.stderr) process.stderr.write(result.stderr);
+          if (result.status !== 'Success') process.exitCode = 1;
+        } catch (err) {
+          console.error(`SSM error: ${err instanceof Error ? err.message : String(err)}`);
+          process.exitCode = 1;
+        }
+        await audit('agent.exec' as any, { agentId: agent.id, agentName: agent.name, detail: { method: 'ssm', cmd } });
+      } else {
+        const ssh = new SshClient(opts.sshKey ?? agent.sshKeyPath);
+        try {
+          await ssh.connect(agent);
+          const result = await ssh.exec(cmd);
+          if (result.stdout) process.stdout.write(result.stdout);
+          if (result.stderr) process.stderr.write(result.stderr);
+          if (result.code !== 0) process.exitCode = 1;
+        } catch (err) {
+          console.error(`SSH error: ${err instanceof Error ? err.message : String(err)}`);
+          process.exitCode = 1;
+        } finally {
+          ssh.disconnect();
+        }
+        await audit('agent.exec' as any, { agentId: agent.id, agentName: agent.name, detail: { method: 'ssh', cmd } });
+      }
+    });
+
   const deploy = new Command('deploy').description('Deploy a new agent');
 
   deploy

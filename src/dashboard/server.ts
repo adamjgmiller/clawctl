@@ -76,6 +76,48 @@ export async function startDashboard(port: number): Promise<void> {
         json(res, engine.getPolicy());
       } else if (path === '/api/health') {
         json(res, { status: 'ok', timestamp: new Date().toISOString() });
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/restart') && req.method === 'POST') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        // Import SSH and restart
+        const { SshClient } = await import('../ssh/index.js');
+        const ssh = new SshClient(agent.sshKeyPath);
+        try {
+          await ssh.connect(agent);
+          const result = await ssh.exec('systemctl --user restart openclaw-gateway.service 2>/dev/null || (source ~/.nvm/nvm.sh 2>/dev/null; openclaw gateway restart)');
+          const { audit: auditFn } = await import('../audit/index.js');
+          await auditFn('agent.restart' as any, { agentId: agent.id, agentName: agent.name });
+          json(res, { success: true, output: result.stdout || result.stderr });
+        } catch (err) {
+          json(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+        } finally {
+          ssh.disconnect();
+        }
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/diagnose') && req.method === 'POST') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        const { SshClient } = await import('../ssh/index.js');
+        const ssh = new SshClient(agent.sshKeyPath);
+        const checks: Array<{ name: string; stdout: string; code: number | null }> = [];
+        try {
+          await ssh.connect(agent);
+          for (const [name, cmd] of [
+            ['systemd', 'systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown'],
+            ['uptime', 'uptime'],
+            ['disk', 'df -h / 2>&1'],
+            ['memory', 'free -h 2>&1 || echo N/A'],
+          ]) {
+            const r = await ssh.exec(cmd);
+            checks.push({ name, stdout: r.stdout.trim(), code: r.code });
+          }
+          json(res, { agent: { id: agent.id, name: agent.name }, checks });
+        } catch (err) {
+          json(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+        } finally {
+          ssh.disconnect();
+        }
       } else {
         // Try static files
         const served = await serveStatic(res, staticDir, path);
