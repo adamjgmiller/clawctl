@@ -61,6 +61,8 @@ clawctl agents logs <id>                    # tail gateway logs
 clawctl agents logs <id> --follow           # live log tail
 clawctl agents diagnose <id>                # systemd + logs + disk + memory report
 clawctl agents diagnose <id> --fix          # diagnose + auto-restart if stopped
+clawctl agents exec <id> uptime             # run command via SSH
+clawctl agents exec <id> uptime --ssm       # run command via AWS SSM
 ```
 
 ### Config
@@ -131,6 +133,18 @@ clawctl watch                               # poll every 60s, print status table
 clawctl watch --interval 30                 # poll every 30s
 ```
 
+### Rolling Updates
+
+```bash
+clawctl update check                        # show OpenClaw versions across fleet
+clawctl update fleet                        # update all agents to latest (rolling, 1 at a time)
+clawctl update fleet --role worker          # filter by role
+clawctl update fleet --concurrency 2        # 2 agents at once
+clawctl update fleet --dry-run              # preview without updating
+clawctl update fleet --channel beta         # update to beta channel
+clawctl update fleet --no-restart           # update package only, skip gateway restart
+```
+
 ### Network (Tailscale)
 
 ```bash
@@ -199,8 +213,8 @@ See `skill/SKILL.md` and `skill/examples.md` for full documentation.
 - [x] Audit log (local JSON + DynamoDB)
 - [x] Web dashboard (REST API + SPA)
 - [x] Alerting (Telegram) + fleet watch
-- [ ] SSM integration (remote commands without SSH)
-- [ ] Rolling updates across fleet
+- [x] SSM integration + agents exec
+- [x] Rolling updates across fleet
 - [ ] CloudWatch log aggregation
 - [ ] DynamoDB registry + secrets (production mode)
-- [ ] Dashboard action buttons (restart, sync config)
+- [x] Dashboard action buttons (restart, diagnose)
