@@ -60,7 +60,7 @@ async function orchestratorWizard(): Promise<void> {
   // Target server
   const tailscaleIp = await input({
     message: 'Tailscale IP of the server to deploy on:',
-    validate: (v) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP address',
+    validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP address',
   });
   const sshUser = await input({ message: 'SSH username on that server:', default: 'openclaw' });
   const sshKey = await input({
@@ -92,7 +92,7 @@ async function orchestratorWizard(): Promise<void> {
   if (setupTelegram) {
     telegramToken = await input({
       message: 'Telegram bot token (from @BotFather):',
-      validate: (v) => v.includes(':') || 'Should look like 123456:ABC...',
+      validate: (v: string) => v.includes(':') || 'Should look like 123456:ABC...',
     });
   }
 
@@ -106,7 +106,7 @@ async function orchestratorWizard(): Promise<void> {
   });
   const apiKey = await input({
     message: `${apiProvider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key:`,
-    validate: (v) => v.length > 10 || 'Enter a valid API key',
+    validate: (v: string) => v.length > 10 || 'Enter a valid API key',
   });
 
   // Heartbeat
@@ -277,7 +277,7 @@ async function addAgentWizard(): Promise<void> {
   const name = await input({ message: 'Agent name:' });
   const tailscaleIp = await input({
     message: 'Tailscale IP:',
-    validate: (v) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP',
+    validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP',
   });
   const user = await input({ message: 'SSH username:', default: 'openclaw' });
   const role = await select({
@@ -329,11 +329,11 @@ async function alertsWizard(): Promise<void> {
 
   const botToken = await input({
     message: 'Telegram bot token:',
-    validate: (v) => v.includes(':') || 'Should look like 123456:ABC...',
+    validate: (v: string) => v.includes(':') || 'Should look like 123456:ABC...',
   });
   const chatId = await input({
     message: 'Telegram chat ID to send alerts to:',
-    validate: (v) => /^-?\d+$/.test(v) || 'Should be a number',
+    validate: (v: string) => /^-?\d+$/.test(v) || 'Should be a number',
   });
 
   const { homedir } = await import('node:os');
