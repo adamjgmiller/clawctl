@@ -15,6 +15,14 @@ function createStore(): AgentStore {
   return new JsonAgentStore();
 }
 
+function formatZodError(err: unknown): string[] {
+  if (err instanceof Error && 'issues' in err) {
+    const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
+    return issues.map((issue) => `Error: ${issue.path.join('.')}: ${issue.message}`);
+  }
+  return [`Error: ${err instanceof Error ? err.message : String(err)}`];
+}
+
 export function createAgentsCommand(): Command {
   const agents = new Command('agents').description('Manage OpenClaw agents');
 
@@ -83,14 +91,7 @@ export function createAgentsCommand(): Command {
             awsRegion: opts.awsRegion,
           });
         } catch (err) {
-          if (err instanceof Error && 'issues' in err) {
-            const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
-            for (const issue of issues) {
-              console.error(`Error: ${issue.path.join('.')}: ${issue.message}`);
-            }
-          } else {
-            console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-          }
+          for (const line of formatZodError(err)) console.error(line);
           process.exitCode = 1;
           return;
         }
@@ -208,14 +209,7 @@ export function createAgentsCommand(): Command {
         try {
           input = UpdateAgentInputSchema.parse(raw);
         } catch (err) {
-          if (err instanceof Error && 'issues' in err) {
-            const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
-            for (const issue of issues) {
-              console.error(`Error: ${issue.path.join('.')}: ${issue.message}`);
-            }
-          } else {
-            console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
-          }
+          for (const line of formatZodError(err)) console.error(line);
           process.exitCode = 1;
           return;
         }
@@ -344,21 +338,28 @@ export function createAgentsCommand(): Command {
           return;
         }
 
-        const input = FreshDeployInputSchema.parse({
-          name: opts.name,
-          role: opts.role,
-          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
-          ami,
-          instanceType: opts.instanceType ?? cfg.ec2InstanceType,
-          keyPair,
-          securityGroup,
-          subnetId: opts.subnetId ?? cfg.ec2SubnetId,
-          tailscaleAuthKey,
-          sshUser: opts.sshUser,
-          sshKeyPath: opts.sshKeyPath,
-          configPath: opts.config,
-          envPath: opts.env,
-        });
+        let input;
+        try {
+          input = FreshDeployInputSchema.parse({
+            name: opts.name,
+            role: opts.role,
+            tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+            ami,
+            instanceType: opts.instanceType ?? cfg.ec2InstanceType,
+            keyPair,
+            securityGroup,
+            subnetId: opts.subnetId ?? cfg.ec2SubnetId,
+            tailscaleAuthKey,
+            sshUser: opts.sshUser,
+            sshKeyPath: opts.sshKeyPath,
+            configPath: opts.config,
+            envPath: opts.env,
+          });
+        } catch (err) {
+          for (const line of formatZodError(err)) console.error(line);
+          process.exitCode = 1;
+          return;
+        }
 
         const store = createStore();
         await freshDeploy(input, store, {
@@ -389,16 +390,23 @@ export function createAgentsCommand(): Command {
         awsInstanceId?: string;
         awsRegion?: string;
       }) => {
-        const input = AdoptDeployInputSchema.parse({
-          name: opts.name,
-          tailscaleIp: opts.tailscaleIp,
-          host: opts.host,
-          role: opts.role,
-          user: opts.user,
-          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
-          awsInstanceId: opts.awsInstanceId,
-          awsRegion: opts.awsRegion,
-        });
+        let input;
+        try {
+          input = AdoptDeployInputSchema.parse({
+            name: opts.name,
+            tailscaleIp: opts.tailscaleIp,
+            host: opts.host,
+            role: opts.role,
+            user: opts.user,
+            tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+            awsInstanceId: opts.awsInstanceId,
+            awsRegion: opts.awsRegion,
+          });
+        } catch (err) {
+          for (const line of formatZodError(err)) console.error(line);
+          process.exitCode = 1;
+          return;
+        }
 
         const store = createStore();
         await adoptDeploy(input, store, {
