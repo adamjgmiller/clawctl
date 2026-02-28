@@ -7,6 +7,7 @@ import { SshClient } from '../../ssh/index.js';
 import { loadDeployTemplates, getTemplatesDir } from '../../deploy/index.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { audit } from '../../audit/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
@@ -68,10 +69,18 @@ export function createConfigCommand(): Command {
         } else {
           console.log(`  ${chalk.green('Gateway restarted')}`);
         }
+
+        await audit('config.push', { agentId: agent.id, agentName: agent.name });
       } catch (err) {
         console.error(
           `Failed to push config to ${agent.name}: ${err instanceof Error ? err.message : String(err)}`,
         );
+        await audit('config.push', {
+          agentId: agent.id,
+          agentName: agent.name,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
         process.exitCode = 1;
       } finally {
         ssh.disconnect();
@@ -123,10 +132,17 @@ export function createConfigCommand(): Command {
         }
 
         console.log(chalk.green('\nConfig pulled successfully.'));
+        await audit('config.pull', { agentId: agent.id, agentName: agent.name });
       } catch (err) {
         console.error(
           `Failed to pull config from ${agent.name}: ${err instanceof Error ? err.message : String(err)}`,
         );
+        await audit('config.pull', {
+          agentId: agent.id,
+          agentName: agent.name,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
         process.exitCode = 1;
       } finally {
         ssh.disconnect();

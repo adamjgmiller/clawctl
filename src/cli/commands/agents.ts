@@ -12,6 +12,7 @@ import { getAgentStatus, formatStatusTable, formatVerboseStatus, formatLogOutput
 import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
+import { audit } from '../../audit/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
@@ -115,6 +116,7 @@ export function createAgentsCommand(): Command {
         const store = createStore();
         const agent = await store.add(input);
         console.log(`Agent registered: ${agent.name} (${agent.id})`);
+        await audit('agent.add', { agentId: agent.id, agentName: agent.name });
       },
     );
 
@@ -171,6 +173,7 @@ export function createAgentsCommand(): Command {
       const removed = await store.remove(id);
       if (removed) {
         console.log(`Agent ${id} removed.`);
+        await audit('agent.remove', { agentId: id });
       } else {
         console.error(`Agent ${id} not found.`);
         process.exitCode = 1;
@@ -233,6 +236,7 @@ export function createAgentsCommand(): Command {
         const updated = await store.update(id, input);
         if (updated) {
           console.log(`Agent ${updated.name} (${updated.id}) updated.`);
+          await audit('agent.update', { agentId: updated.id, agentName: updated.name, detail: raw });
         }
       },
     );
@@ -287,6 +291,12 @@ export function createAgentsCommand(): Command {
           newStatus = 'online';
         }
         await store.update(s.agent.id, { status: newStatus });
+        await audit('agent.status', {
+          agentId: s.agent.id,
+          agentName: s.agent.name,
+          success: s.reachable,
+          error: s.error,
+        });
       }
 
       if (opts.json) {

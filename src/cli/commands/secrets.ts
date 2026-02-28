@@ -5,6 +5,7 @@ import { SecretVault } from '../../secrets/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
 import { SshClient } from '../../ssh/index.js';
+import { audit } from '../../audit/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
