@@ -62,7 +62,7 @@ export class JsonAgentStore implements AgentStore {
 
   async remove(id: string): Promise<boolean> {
     const agents = await this.readAgents();
-    const index = agents.findIndex((a) => a.id === id);
+    const index = agents.findIndex((a) => a.id === id || a.name === id);
     if (index === -1) return false;
     agents.splice(index, 1);
     await this.writeAgents(agents);
@@ -71,7 +71,7 @@ export class JsonAgentStore implements AgentStore {
 
   async update(id: string, input: UpdateAgentInput): Promise<Agent | undefined> {
     const agents = await this.readAgents();
-    const index = agents.findIndex((a) => a.id === id);
+    const index = agents.findIndex((a) => a.id === id || a.name === id);
     if (index === -1) return undefined;
     const updated = AgentSchema.parse({
       ...agents[index],

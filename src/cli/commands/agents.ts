@@ -198,6 +198,7 @@ export function createAgentsCommand(): Command {
     .option('--role <role>', 'New role (orchestrator, worker, monitor, gateway)')
     .option('--user <user>', 'New SSH user')
     .option('--tags <tags>', 'Comma-separated tags (replaces existing)')
+    .option('--ssh-key <path>', 'SSH private key path')
     .action(
       async (
         id: string,
@@ -208,6 +209,7 @@ export function createAgentsCommand(): Command {
           role?: string;
           user?: string;
           tags?: string;
+          sshKey?: string;
         },
       ) => {
         const store = createStore();
@@ -225,6 +227,7 @@ export function createAgentsCommand(): Command {
         if (opts.role !== undefined) raw.role = opts.role;
         if (opts.user !== undefined) raw.user = opts.user;
         if (opts.tags !== undefined) raw.tags = opts.tags.split(',').map((t) => t.trim());
+        if (opts.sshKey !== undefined) raw.sshKeyPath = opts.sshKey;
 
         if (Object.keys(raw).length === 0) {
           console.error('No fields to update. Pass at least one --flag.');
