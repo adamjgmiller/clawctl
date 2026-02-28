@@ -12,7 +12,7 @@ export async function adoptDeploy(
   // 1. Verify OpenClaw running via SSH
   callbacks.onStep(`Connecting to ${input.tailscaleIp}...`);
   const ssh = new SshClient();
-  const result = await ssh.execOnHost(input.tailscaleIp, input.user, 'openclaw status --json');
+  const result = await ssh.execOnHost(input.tailscaleIp, input.user, 'source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json');
 
   if (result.code !== 0) {
     throw new Error(
