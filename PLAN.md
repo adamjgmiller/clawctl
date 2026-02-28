@@ -72,7 +72,7 @@ All inter-agent communication goes over Tailscale (encrypted, no public ports ne
 - [ ] Secrets vault (AWS) — migrate to AWS Secrets Manager backend
 
 ## Phase 3: Intelligence Layer
-- [ ] OpenClaw skill/agent that uses clawctl as a tool
+- [x] OpenClaw skill/agent that uses clawctl as a tool
 - [ ] Diagnostic reasoning (agent down → check systemd → check logs → diagnose)
 - [ ] Policy engine (rules file, enforcement on operations)
 - [ ] Audit log (DynamoDB append-only table)
