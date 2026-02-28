@@ -77,6 +77,10 @@
         <div id="policy-section"></div>
       </div>
       <div class="section">
+      </div>
+      <div class="section">
+        <h2>Tasks</h2>
+        <div style="overflow-x:auto"><table id="tasks-table"><thead><tr><th>Title</th><th>Status</th><th>Agent</th><th>Route</th><th>Created</th></tr></thead><tbody></tbody></table></div>
         <h2>Recent Audit Log</h2>
         <div style="overflow-x:auto"><table id="audit-table"><thead><tr><th>Time</th><th>Action</th><th>Agent</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
       </div>
@@ -92,12 +96,14 @@
         <div class="tab" onclick="switchTab('config')">Config</div>
         <div class="tab" onclick="switchTab('health')">Health History</div>
         <div class="tab" onclick="switchTab('workspace')">Workspace</div>
+        <div class="tab" onclick="switchTab('tasks')">Tasks</div>
       </div>
       <div id="tab-overview" class="tab-content active"></div>
       <div id="tab-logs" class="tab-content"></div>
       <div id="tab-config" class="tab-content"></div>
       <div id="tab-health" class="tab-content"></div>
       <div id="tab-workspace" class="tab-content"></div>
+      <div id="tab-tasks" class="tab-content"></div>
     </div>
   </div>
 
@@ -142,6 +148,17 @@
       return html;
     }
 
+    function renderTasks(tasks) {
+      var tbody = document.querySelector("#tasks-table tbody");
+      if (!tasks || tasks.length === 0) { tbody.innerHTML = "<tr><td colspan=5 style=\"color:#8b949e\">No tasks</td></tr>"; return; }
+      var sc = { completed: "#3fb950", failed: "#f85149", running: "#d29922", assigned: "#d29922", pending: "#58a6ff", cancelled: "#8b949e" };
+      tbody.innerHTML = tasks.map(function(t) {
+        var c = sc[t.status] || "#8b949e";
+        var created = new Date(t.createdAt).toLocaleString();
+        return "<tr><td>" + t.title + "</td><td><span style=\"color:" + c + "\">" + t.status + "</span></td><td>" + (t.assignedToName || "-") + "</td><td style=\"color:#8b949e;font-size:12px\">" + (t.routingReason || "-") + "</td><td>" + created + "</td></tr>";
+      }).join("");
+    }
+
     function renderAudit(entries) {
       var tbody = document.querySelector('#audit-table tbody');
       tbody.innerHTML = entries.map(function(e) {
@@ -174,15 +191,17 @@
     // --- Fleet page ---
     async function loadFleet() {
       try {
-        var [agents, audit, policy] = await Promise.all([
+        var [agents, audit, policy, tasks] = await Promise.all([
           fetch(API + '/agents').then(function(r) { return r.json(); }),
           fetch(API + '/audit?limit=30').then(function(r) { return r.json(); }),
           fetch(API + '/policy').then(function(r) { return r.json(); }),
+          fetch(API + '/tasks').then(function(r) { return r.json(); }),
         ]);
-        fleetData = { agents: agents, audit: audit, policy: policy };
+        fleetData = { agents: agents, audit: audit, policy: policy, tasks: tasks };
         document.getElementById('agents-grid').innerHTML = agents.map(renderAgent).join('');
         document.getElementById('policy-section').innerHTML = renderPolicy(policy);
         renderAudit(audit);
+        renderTasks(tasks);
         document.getElementById('loading').style.display = 'none';
         document.getElementById('fleet-page').style.display = 'block';
       } catch (err) {
@@ -243,6 +262,7 @@
       if (name === 'config' && currentAgent) loadConfig(currentAgent.id);
       if (name === 'health' && currentAgent) loadHealth(currentAgent.id);
       if (name === 'workspace' && currentAgent) loadWorkspace(currentAgent.id);
+      if (name === 'tasks' && currentAgent) loadAgentTasks(currentAgent.id, currentAgent.name);
     }
 
     async function loadOverview(agent) {
@@ -378,6 +398,29 @@
     async function loadDiagnose(id) {
       switchTab('overview');
       if (currentAgent) loadOverview(currentAgent);
+    }
+
+    async function loadAgentTasks(id, name) {
+      var el = document.getElementById("tab-tasks");
+      el.innerHTML = "<div class=\"loading\">Loading tasks...</div>";
+      try {
+        var tasks = await fetch(API + "/tasks").then(function(r) { return r.json(); });
+        var assigned = tasks.filter(function(t) { return t.assignedTo === id; });
+        var requested = tasks.filter(function(t) { return t.requestedBy === name || t.requestedBy === id; });
+        var sc = { completed: "#3fb950", failed: "#f85149", running: "#d29922", assigned: "#d29922", pending: "#58a6ff", cancelled: "#8b949e" };
+        function taskRows(list) {
+          if (list.length === 0) return "<tr><td colspan=5 style=\"color:#8b949e\">None</td></tr>";
+          return list.map(function(t) {
+            var c = sc[t.status] || "#8b949e";
+            return "<tr><td>" + escapeHtml(t.title) + "</td><td><span style=\"color:" + c + "\">" + t.status + "</span></td><td>" + (t.assignedToName || "-") + "</td><td style=\"color:#8b949e;font-size:12px\">" + (t.routingReason || "-").slice(0,60) + "</td><td>" + new Date(t.createdAt).toLocaleString() + "</td></tr>";
+          }).join("");
+        }
+        var html = "<h3 style=\"margin:12px 0 8px\">Assigned to this agent (" + assigned.length + ")</h3>";
+        html += "<div style=\"overflow-x:auto\"><table><thead><tr><th>Title</th><th>Status</th><th>Agent</th><th>Route</th><th>Created</th></tr></thead><tbody>" + taskRows(assigned) + "</tbody></table></div>";
+        html += "<h3 style=\"margin:20px 0 8px\">Requested by this agent (" + requested.length + ")</h3>";
+        html += "<div style=\"overflow-x:auto\"><table><thead><tr><th>Title</th><th>Status</th><th>Agent</th><th>Route</th><th>Created</th></tr></thead><tbody>" + taskRows(requested) + "</tbody></table></div>";
+        el.innerHTML = html;
+      } catch (e) { el.innerHTML = "<p style=\"color:#f85149\">Error: " + e.message + "</p>"; }
     }
 
     async function loadWorkspace(id) {
