@@ -20,8 +20,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/openclaw
-ExecStart=%h/.local/bin/openclaw start
+WorkingDirectory=%h/.openclaw
+ExecStart=/bin/bash -lc 'source %h/.nvm/nvm.sh 2>/dev/null; openclaw gateway start'
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
