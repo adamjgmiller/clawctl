@@ -16,6 +16,7 @@ export const AuditAction = z.enum([
   'secrets.delete',
   'secrets.push',
   'network.tag',
+  'agent.diagnose',
 ]);
 
 export type AuditAction = z.infer<typeof AuditAction>;

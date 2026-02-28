@@ -8,7 +8,7 @@ import {
 } from '../../types/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
-import { getAgentStatus, formatStatusTable, formatVerboseStatus, formatLogOutput } from '../../health/index.js';
+import { getAgentStatus, formatStatusTable, formatVerboseStatus, formatLogOutput, diagnoseAgent, restartGateway, formatDiagnosticReport } from '../../health/index.js';
 import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
@@ -363,6 +363,145 @@ export function createAgentsCommand(): Command {
         process.exitCode = 1;
       } finally {
         ssh.disconnect();
+      }
+    });
+
+
+
+  agents
+    .command('diagnose')
+    .description('Diagnose an agent (systemd, logs, disk, memory)')
+    .argument('<id>', 'Agent ID')
+    .option('--fix', 'Attempt safe auto-fix actions (restart gateway if stopped)')
+    .option('--json', 'Output as JSON')
+    .action(async (id: string, opts: { fix?: boolean; json?: boolean }) => {
+      const store = createStore();
+      const agent = await store.get(id);
+      if (!agent) {
+        console.error(`Agent ${id} not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const ssh = new SshClient(agent.sshKeyPath);
+      const checks: Array<{ name: string; cmd: string; stdout: string; stderr: string; code: number | null }> = [];
+
+      const pushCheck = async (name: string, cmd: string) => {
+        const res = await ssh.exec(cmd);
+        checks.push({ name, cmd, stdout: res.stdout, stderr: res.stderr, code: res.code });
+        return res;
+      };
+
+      const recommended: string[] = [];
+      let fixAttempted: string[] = [];
+
+      try {
+        await ssh.connect(agent);
+
+        // Core service checks
+        const isActiveRes = await pushCheck(
+          'systemd.is-active',
+          'systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown',
+        );
+        const active = (isActiveRes.stdout || '').trim().toLowerCase();
+
+        await pushCheck(
+          'systemd.status',
+          'systemctl --user status openclaw-gateway.service --no-pager -l 2>&1 | tail -n 120',
+        );
+
+        // OpenClaw status (best-effort)
+        await pushCheck(
+          'openclaw.status',
+          'source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json 2>/dev/null || openclaw status 2>&1 || echo "openclaw not available"',
+        );
+
+        // Basic host health
+        await pushCheck('host.df', 'df -h / 2>&1');
+        await pushCheck('host.free', 'free -h 2>&1 || vm_stat 2>&1 || echo "free/vm_stat unavailable"');
+        await pushCheck('host.uptime', 'uptime 2>&1');
+
+        // Recent gateway logs
+        await pushCheck(
+          'gateway.logs',
+          'tail -n 80 /tmp/openclaw/*.log 2>/dev/null || journalctl --user -u openclaw-gateway.service -n 80 --no-pager 2>/dev/null || echo "No logs found"',
+        );
+
+        // Recommendations
+        if (active !== 'active') {
+          recommended.push(`Gateway service is not active (systemd says: ${active}).`);
+          recommended.push('Try: clawctl config push <id> (to re-sync config)');
+          recommended.push('Try: clawctl agents logs <id> --lines 200');
+
+          if (opts.fix) {
+            const restartRes = await pushCheck(
+              'systemd.restart',
+              'systemctl --user restart openclaw-gateway.service 2>&1 || echo "restart failed"',
+            );
+            fixAttempted.push('restart openclaw-gateway.service');
+            // re-check
+            await pushCheck(
+              'systemd.is-active.after',
+              'systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown',
+            );
+            if ((restartRes.code ?? 0) != 0) {
+              recommended.push('Restart attempt returned non-zero. Check systemd status output above.');
+            }
+          } else {
+            recommended.push('Re-run with --fix to attempt a restart if appropriate.');
+          }
+        } else {
+          recommended.push('Gateway service appears active. If messages are still failing, inspect recent logs and OpenClaw status output.');
+        }
+      } catch (err) {
+        recommended.push(`SSH/diagnose failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      } finally {
+        ssh.disconnect();
+      }
+
+      const report = {
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          host: agent.host,
+          tailscaleIp: agent.tailscaleIp,
+          user: agent.user,
+          role: agent.role,
+        },
+        checks,
+        fixAttempted,
+        recommendedActions: recommended,
+      };
+
+      await audit('agent.diagnose', {
+        agentId: agent.id,
+        agentName: agent.name,
+        detail: { fix: Boolean(opts.fix), fixAttempted, recommendedCount: recommended.length },
+      });
+
+      if (opts.json) {
+        console.log(JSON.stringify(report, null, 2));
+        return;
+      }
+
+      console.log(chalk.bold(`--- Diagnose: ${agent.name} (${agent.role}) ---`));
+      console.log(`Host:         ${agent.host}`);
+      console.log(`Tailscale IP: ${agent.tailscaleIp}`);
+      console.log(`User:         ${agent.user}`);
+      console.log('');
+
+      for (const c of checks) {
+        console.log(chalk.dim(`$ ${c.cmd}`));
+        if (c.stdout) process.stdout.write(String(c.stdout).trimEnd() + '\n');
+        if (c.stderr) process.stderr.write(String(c.stderr).trimEnd() + '\n');
+        console.log('');
+      }
+
+      if (recommended.length) {
+        console.log(chalk.bold('Recommended actions:'));
+        for (const a of recommended) console.log(`- ${a}`);
+        console.log('');
       }
     });
 
