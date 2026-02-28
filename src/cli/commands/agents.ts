@@ -18,6 +18,7 @@ import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
 import { audit } from '../../audit/index.js';
+import { bootstrapOrchestrator } from '../../deploy/orchestrator.js';
 import { alert } from '../../alerting/index.js';
 
 function createStore(): AgentStore {
@@ -793,6 +794,94 @@ export function createAgentsCommand(): Command {
         }
       },
     );
+
+
+  deploy
+    .command('orchestrator')
+    .description('Deploy and bootstrap a new fleet orchestrator')
+    .requiredOption('--name <name>', 'Orchestrator agent name')
+    .requiredOption('--tailscale-ip <ip>', 'Tailscale IP of target server')
+    .requiredOption('--operator-name <name>', 'Human operator name')
+    .option('--operator-timezone <tz>', 'Operator timezone', 'America/Los_Angeles')
+    .option('--operator-email <email>', 'Operator email for reports')
+    .option('--operator-telegram <id>', 'Operator Telegram chat ID')
+    .option('--user <user>', 'SSH user', 'openclaw')
+    .option('--ssh-key <path>', 'SSH private key path')
+    .option('--host <host>', 'Display hostname')
+    .option('--model <model>', 'Default model for the orchestrator')
+    .option('--tags <tags>', 'Comma-separated tags')
+    .option('--skip-install', 'Skip OpenClaw installation (already installed)')
+    .action(async (opts: {
+      name: string;
+      tailscaleIp: string;
+      operatorName: string;
+      operatorTimezone: string;
+      operatorEmail?: string;
+      operatorTelegram?: string;
+      user: string;
+      sshKey?: string;
+      host?: string;
+      model?: string;
+      tags?: string;
+      skipInstall?: boolean;
+    }) => {
+      const store = createStore();
+      const fleet = await store.list();
+
+      console.log(chalk.bold('Deploying fleet orchestrator: ' + opts.name));
+      console.log('');
+
+      const ssh = new SshClient(opts.sshKey);
+      try {
+        console.log('Connecting to ' + opts.tailscaleIp + '...');
+        await ssh.connectTo(opts.tailscaleIp, opts.user);
+
+        if (!opts.skipInstall) {
+          console.log('Installing OpenClaw...');
+          const install = await ssh.exec('source ~/.nvm/nvm.sh 2>/dev/null; which openclaw >/dev/null 2>&1 && echo "already installed" || (curl -fsSL https://docs.openclaw.ai/install.sh | bash)');
+          console.log('  ' + (install.stdout.includes('already installed') ? 'OpenClaw already installed' : 'OpenClaw installed'));
+        }
+
+        // Bootstrap orchestrator workspace
+        await bootstrapOrchestrator(ssh, {
+          operatorName: opts.operatorName,
+          operatorTimezone: opts.operatorTimezone,
+          operatorEmail: opts.operatorEmail,
+          operatorTelegram: opts.operatorTelegram,
+          model: opts.model,
+        }, fleet, (msg) => console.log('  ' + msg));
+
+        // Register in fleet
+        const agent = await store.add({
+          name: opts.name,
+          host: opts.host ?? opts.tailscaleIp,
+          tailscaleIp: opts.tailscaleIp,
+          role: 'orchestrator',
+          user: opts.user,
+          tags: opts.tags ? opts.tags.split(',').map(t => t.trim()) : ['orchestrator'],
+          sshKeyPath: opts.sshKey,
+        });
+
+        console.log('');
+        console.log(chalk.green('Orchestrator deployed and registered: ' + agent.name + ' (' + agent.id + ')'));
+        console.log('');
+        console.log('Next steps:');
+        console.log('  1. Configure openclaw.json on the orchestrator (model, channels, etc.)');
+        console.log('  2. Start the gateway: ssh ' + opts.user + '@' + opts.tailscaleIp + ' "openclaw gateway start"');
+        console.log('  3. The orchestrator will pick up fleet management on its first heartbeat');
+
+        await audit('agent.deploy.orchestrator' as any, {
+          agentId: agent.id,
+          agentName: agent.name,
+          detail: { fleet: fleet.length, operator: opts.operatorName } as Record<string, unknown>,
+        });
+      } catch (err) {
+        console.error(chalk.red('Deploy failed: ' + (err instanceof Error ? err.message : String(err))));
+        process.exitCode = 1;
+      } finally {
+        ssh.disconnect();
+      }
+    });
 
   agents.addCommand(deploy);
 

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "build": "tsc",
+    "build": "tsc && cp -r src/deploy/orchestrator-templates dist/deploy/",
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
