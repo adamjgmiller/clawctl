@@ -42,7 +42,7 @@ export class JsonAgentStore implements AgentStore {
 
   async get(id: string): Promise<Agent | undefined> {
     const agents = await this.readAgents();
-    return agents.find((a) => a.id === id);
+    return agents.find((a) => a.id === id || a.name === id);
   }
 
   async add(input: CreateAgentInput): Promise<Agent> {
