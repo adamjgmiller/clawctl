@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import {
   CreateAgentInputSchema,
+  UpdateAgentInputSchema,
   FreshDeployInputSchema,
   AdoptDeployInputSchema,
 } from '../../types/index.js';
@@ -154,6 +155,73 @@ export function createAgentsCommand(): Command {
         process.exitCode = 1;
       }
     });
+
+  agents
+    .command('update')
+    .description('Update an agent\'s fields')
+    .argument('<id>', 'Agent ID')
+    .option('--name <name>', 'New agent name')
+    .option('--host <host>', 'New hostname')
+    .option('--tailscale-ip <ip>', 'New Tailscale IP')
+    .option('--role <role>', 'New role (orchestrator, worker, monitor, gateway)')
+    .option('--user <user>', 'New SSH user')
+    .option('--tags <tags>', 'Comma-separated tags (replaces existing)')
+    .action(
+      async (
+        id: string,
+        opts: {
+          name?: string;
+          host?: string;
+          tailscaleIp?: string;
+          role?: string;
+          user?: string;
+          tags?: string;
+        },
+      ) => {
+        const store = createStore();
+        const existing = await store.get(id);
+        if (!existing) {
+          console.error(`Agent ${id} not found.`);
+          process.exitCode = 1;
+          return;
+        }
+
+        const raw: Record<string, unknown> = {};
+        if (opts.name !== undefined) raw.name = opts.name;
+        if (opts.host !== undefined) raw.host = opts.host;
+        if (opts.tailscaleIp !== undefined) raw.tailscaleIp = opts.tailscaleIp;
+        if (opts.role !== undefined) raw.role = opts.role;
+        if (opts.user !== undefined) raw.user = opts.user;
+        if (opts.tags !== undefined) raw.tags = opts.tags.split(',').map((t) => t.trim());
+
+        if (Object.keys(raw).length === 0) {
+          console.error('No fields to update. Pass at least one --flag.');
+          process.exitCode = 1;
+          return;
+        }
+
+        let input;
+        try {
+          input = UpdateAgentInputSchema.parse(raw);
+        } catch (err) {
+          if (err instanceof Error && 'issues' in err) {
+            const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
+            for (const issue of issues) {
+              console.error(`Error: ${issue.path.join('.')}: ${issue.message}`);
+            }
+          } else {
+            console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          process.exitCode = 1;
+          return;
+        }
+
+        const updated = await store.update(id, input);
+        if (updated) {
+          console.log(`Agent ${updated.name} (${updated.id}) updated.`);
+        }
+      },
+    );
 
   agents
     .command('status')
