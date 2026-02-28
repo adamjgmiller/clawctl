@@ -33,7 +33,7 @@ export async function seedDefaultTemplates(): Promise<string[]> {
 
   const files: Array<[string, string]> = [
     ['openclaw.json', DEFAULT_OPENCLAW_JSON],
-    ['.env.template', DEFAULT_ENV_TEMPLATE],
+    ['.env', DEFAULT_ENV_TEMPLATE],
     ['openclaw.service', DEFAULT_SYSTEMD_UNIT],
   ];
 

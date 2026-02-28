@@ -61,12 +61,15 @@ All inter-agent communication goes over Tailscale (encrypted, no public ports ne
 - [x] `agents logs <id>` — SSH log tailing with --lines and --follow support
 - [x] Colored CLI output via chalk (green/red/yellow for status indicators)
 - [x] Gitleaks pre-commit hook
-- [ ] Deploy templates — bundled openclaw.json / .env / cron templates in ~/.clawctl/templates/
+- [x] Deploy templates — bundled openclaw.json / .env / systemd unit in src/deploy/default-templates.ts, seeded by `clawctl init`
+- [x] Verbose status bug fix — nested objects now formatted as key-value tree instead of [object Object]
+- [x] Log formatting — JSON log lines parsed and displayed as `[timestamp] [LEVEL] message`
 
 ## Phase 2: Config & Secrets
-- [ ] Secrets vault via AWS Secrets Manager (per-agent secret scoping, access by policy)
-- [ ] Config sync (push openclaw.json, .env to managed agents)
-- [ ] Drift detection (compare running config vs declared config)
+- [x] Config sync — `config push <agent-id>` SCPs openclaw.json + .env and restarts gateway; `config pull <agent-id>` fetches remote config locally
+- [x] Drift detection — `config diff <agent-id>` shows unified diff of local vs remote config; `--all` for fleet-wide check
+- [x] Secrets vault (local-first) — AES-256-GCM encrypted store at ~/.clawctl/secrets.json with master password; `secrets set/get/list/delete/push` commands with per-agent scoping
+- [ ] Secrets vault (AWS) — migrate to AWS Secrets Manager backend
 
 ## Phase 3: Intelligence Layer
 - [ ] OpenClaw skill/agent that uses clawctl as a tool
