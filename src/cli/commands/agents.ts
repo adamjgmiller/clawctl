@@ -66,16 +66,30 @@ export function createAgentsCommand(): Command {
         awsInstanceId?: string;
         awsRegion?: string;
       }) => {
-        const input = CreateAgentInputSchema.parse({
-          name: opts.name,
-          host: opts.host,
-          tailscaleIp: opts.tailscaleIp,
-          role: opts.role,
-          user: opts.user,
-          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
-          awsInstanceId: opts.awsInstanceId,
-          awsRegion: opts.awsRegion,
-        });
+        let input;
+        try {
+          input = CreateAgentInputSchema.parse({
+            name: opts.name,
+            host: opts.host,
+            tailscaleIp: opts.tailscaleIp,
+            role: opts.role,
+            user: opts.user,
+            tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+            awsInstanceId: opts.awsInstanceId,
+            awsRegion: opts.awsRegion,
+          });
+        } catch (err) {
+          if (err instanceof Error && 'issues' in err) {
+            const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
+            for (const issue of issues) {
+              console.error(`Error: ${issue.path.join('.')}: ${issue.message}`);
+            }
+          } else {
+            console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          process.exitCode = 1;
+          return;
+        }
 
         const store = createStore();
         const agent = await store.add(input);

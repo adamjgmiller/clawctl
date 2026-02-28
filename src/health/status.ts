@@ -12,7 +12,7 @@ export interface AgentStatusResult {
 export async function getAgentStatus(agent: Agent): Promise<AgentStatusResult> {
   const ssh = new SshClient();
   try {
-    const result = await ssh.execOnAgent(agent, 'openclaw status --json');
+    const result = await ssh.execOnAgent(agent, 'source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json');
 
     if (result.code !== 0) {
       return {
