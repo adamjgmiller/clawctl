@@ -9,11 +9,13 @@
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e1e4e8; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
     h1 { font-size: 24px; margin-bottom: 8px; }
+    h2 { font-size: 18px; margin-bottom: 12px; }
     .subtitle { color: #8b949e; margin-bottom: 24px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 32px; }
     .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
     .card h3 { font-size: 14px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-    .agent-name { font-size: 18px; font-weight: 600; }
+    .agent-name { font-size: 18px; font-weight: 600; cursor: pointer; }
+    .agent-name:hover { color: #58a6ff; text-decoration: underline; }
     .agent-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
     .agent-row .label { color: #8b949e; }
     .status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
@@ -25,20 +27,47 @@
     table th { text-align: left; padding: 8px 12px; color: #8b949e; border-bottom: 1px solid #30363d; font-weight: 600; }
     table td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
     .section { margin-bottom: 32px; }
-    .section h2 { font-size: 18px; margin-bottom: 12px; }
     .loading { color: #8b949e; text-align: center; padding: 40px; }
     .tag { display: inline-block; padding: 1px 6px; background: #21262d; border-radius: 4px; font-size: 12px; margin: 1px; }
     .pill { display: inline-block; padding: 2px 8px; background: #21262d; border-radius: 4px; font-size: 12px; }
     .effect-allow { color: #3fb950; }
     .effect-deny { color: #f85149; }
+    .btn { background: #21262d; color: #e1e4e8; border: 1px solid #30363d; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+    .btn:hover { background: #30363d; }
+    .btn-danger { border-color: #f85149; }
+    .btn-danger:hover { background: #3d1214; }
+    .back-link { color: #58a6ff; cursor: pointer; font-size: 14px; margin-bottom: 16px; display: inline-block; }
+    .back-link:hover { text-decoration: underline; }
+    .log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; color: #c9d1d9; }
+    .config-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: #c9d1d9; }
+    .tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid #30363d; }
+    .tab { padding: 8px 16px; cursor: pointer; color: #8b949e; font-size: 14px; border-bottom: 2px solid transparent; }
+    .tab:hover { color: #e1e4e8; }
+    .tab.active { color: #e1e4e8; border-bottom-color: #f78166; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .health-timeline { display: flex; gap: 2px; align-items: center; margin-top: 8px; }
+    .health-dot { width: 8px; height: 24px; border-radius: 2px; }
+    .health-dot.online { background: #3fb950; }
+    .health-dot.offline { background: #f85149; }
+    .health-dot.degraded { background: #d29922; }
+    .health-dot.unknown { background: #21262d; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; text-align: center; }
+    .stat-value { font-size: 24px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #8b949e; margin-top: 4px; }
   </style>
 </head>
 <body>
   <div class="container" id="app">
-    <h1>🦞 clawctl Dashboard</h1>
-    <p class="subtitle">Fleet overview</p>
+    <div id="header">
+      <h1>&#x1f99e; clawctl Dashboard</h1>
+      <p class="subtitle">Fleet overview</p>
+    </div>
     <div class="loading" id="loading">Loading fleet data...</div>
-    <div id="content" style="display:none">
+
+    <!-- Fleet overview page -->
+    <div id="fleet-page" style="display:none">
       <div class="section">
         <h2>Agents</h2>
         <div class="grid" id="agents-grid"></div>
@@ -52,95 +81,326 @@
         <div style="overflow-x:auto"><table id="audit-table"><thead><tr><th>Time</th><th>Action</th><th>Agent</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
       </div>
     </div>
+
+    <!-- Agent detail page -->
+    <div id="detail-page" style="display:none">
+      <span class="back-link" onclick="showFleet()">&#8592; Back to fleet</span>
+      <div id="detail-header"></div>
+      <div class="tabs" id="detail-tabs">
+        <div class="tab active" onclick="switchTab('overview')">Overview</div>
+        <div class="tab" onclick="switchTab('logs')">Logs</div>
+        <div class="tab" onclick="switchTab('config')">Config</div>
+        <div class="tab" onclick="switchTab('health')">Health History</div>
+      </div>
+      <div id="tab-overview" class="tab-content active"></div>
+      <div id="tab-logs" class="tab-content"></div>
+      <div id="tab-config" class="tab-content"></div>
+      <div id="tab-health" class="tab-content"></div>
+    </div>
   </div>
+
   <script>
     const API = window.location.origin + '/api';
+    let fleetData = { agents: [], audit: [], policy: {} };
+    let currentAgent = null;
+    let refreshTimer = null;
 
-    function statusClass(s) {
-      return 'status status-' + (s || 'unknown');
-    }
+    function statusClass(s) { return 'status status-' + (s || 'unknown'); }
 
     function renderAgent(a) {
-      const tags = (a.tags || []).map(t => `<span class="tag">${t}</span>`).join(' ') || '<span class="tag">none</span>';
-      return `<div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span class="agent-name">${a.name}</span>
-          <span class="${statusClass(a.status)}">${a.status}</span>
-        </div>
-        <div class="agent-row"><span class="label">Role</span><span class="pill">${a.role}</span></div>
-        <div class="agent-row"><span class="label">Host</span><span>${a.host}</span></div>
-        <div class="agent-row"><span class="label">Tailscale IP</span><span>${a.tailscaleIp}</span></div>
-        <div class="agent-row"><span class="label">User</span><span>${a.user}</span></div>
-        <div class="agent-row"><span class="label">Tags</span><span>${tags}</span></div>
-        <div style="margin-top:12px;display:flex;gap:8px">
-          <button onclick="restartAgent('${a.id}','${a.name}')" style="background:#21262d;color:#e1e4e8;border:1px solid #30363d;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">🔄 Restart</button>
-          <button onclick="diagnoseAgent('${a.id}','${a.name}')" style="background:#21262d;color:#e1e4e8;border:1px solid #30363d;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">🔍 Diagnose</button>
-        </div>
-      </div>\`;
+      const tags = (a.tags || []).map(t => '<span class="tag">' + t + '</span>').join(' ') || '<span class="tag">none</span>';
+      return '<div class="card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<span class="agent-name" onclick="showAgent(\'' + a.id + '\')">' + a.name + '</span>' +
+          '<span class="' + statusClass(a.status) + '">' + a.status + '</span>' +
+        '</div>' +
+        '<div class="agent-row"><span class="label">Role</span><span class="pill">' + a.role + '</span></div>' +
+        '<div class="agent-row"><span class="label">Host</span><span>' + a.host + '</span></div>' +
+        '<div class="agent-row"><span class="label">Tailscale IP</span><span>' + a.tailscaleIp + '</span></div>' +
+        '<div class="agent-row"><span class="label">User</span><span>' + a.user + '</span></div>' +
+        '<div class="agent-row"><span class="label">Tags</span><span>' + tags + '</span></div>' +
+        '<div style="margin-top:12px;display:flex;gap:8px">' +
+          '<button class="btn" onclick="event.stopPropagation();showAgent(\'' + a.id + '\')">&#x1f50d; Details</button>' +
+          '<button class="btn" onclick="event.stopPropagation();restartAgent(\'' + a.id + '\',\'' + a.name + '\')">&#x1f504; Restart</button>' +
+        '</div>' +
+      '</div>';
     }
 
     function renderPolicy(pol) {
       if (!pol.rules || pol.rules.length === 0) return '<p style="color:#8b949e">No policy rules defined.</p>';
-      let html = `<p style="color:#8b949e;margin-bottom:8px">Default: <span class="effect-${pol.defaultEffect}">${pol.defaultEffect}</span></p>`;
+      var html = '<p style="color:#8b949e;margin-bottom:8px">Default: <span class="effect-' + pol.defaultEffect + '">' + pol.defaultEffect + '</span></p>';
       html += '<table><thead><tr><th>Rule</th><th>Action</th><th>Effect</th><th>Conditions</th><th>Confirm?</th></tr></thead><tbody>';
-      for (const r of pol.rules) {
-        const conds = (r.conditions || []).map(c => `${c.field} ${c.op} ${Array.isArray(c.value) ? c.value.join(',') : c.value}`).join('; ') || '-';
-        html += `<tr><td>${r.id}</td><td>${r.action}</td><td class="effect-${r.effect}">${r.effect}</td><td>${conds}</td><td>${r.requireConfirmation ? '⚠️' : '-'}</td></tr>`;
+      for (var r of pol.rules) {
+        var conds = (r.conditions || []).map(function(c) { return c.field + ' ' + c.op + ' ' + (Array.isArray(c.value) ? c.value.join(',') : c.value); }).join('; ') || '-';
+        html += '<tr><td>' + r.id + '</td><td>' + r.action + '</td><td class="effect-' + r.effect + '">' + r.effect + '</td><td>' + conds + '</td><td>' + (r.requireConfirmation ? '&#x26a0;&#xfe0f;' : '-') + '</td></tr>';
       }
       html += '</tbody></table>';
       return html;
     }
 
     function renderAudit(entries) {
-      const tbody = document.querySelector('#audit-table tbody');
-      tbody.innerHTML = entries.map(e => {
-        const t = new Date(e.timestamp).toLocaleString();
-        const agent = e.meta?.agentName || e.meta?.agentId || '-';
-        const detail = e.meta?.error || (e.meta?.detail ? JSON.stringify(e.meta.detail).slice(0,80) : '-');
-        return `<tr><td>${t}</td><td>${e.action}</td><td>${agent}</td><td>${detail}</td></tr>`;
+      var tbody = document.querySelector('#audit-table tbody');
+      tbody.innerHTML = entries.map(function(e) {
+        var t = new Date(e.timestamp).toLocaleString();
+        var agent = (e.meta && (e.meta.agentName || e.meta.agentId)) || '-';
+        var detail = (e.meta && e.meta.error) || (e.meta && e.meta.detail ? JSON.stringify(e.meta.detail).slice(0,80) : '-');
+        return '<tr><td>' + t + '</td><td>' + e.action + '</td><td>' + agent + '</td><td>' + detail + '</td></tr>';
       }).join('');
     }
 
     async function restartAgent(id, name) {
       if (!confirm('Restart gateway on ' + name + '?')) return;
       try {
-        const r = await fetch(API + '/agents/' + id + '/restart', { method: 'POST' });
-        const data = await r.json();
-        if (data.success) { alert('Restarted ' + name); load(); }
-        else alert('Failed: ' + (data.error || 'unknown'));
-      } catch (e) { alert('Error: ' + e.message); }
+        var r = await fetch(API + '/agents/' + id + '/restart', { method: 'POST' });
+        var data = await r.json();
+        if (data.success) { showNotification('Restarted ' + name, 'success'); loadFleet(); }
+        else showNotification('Failed: ' + (data.error || 'unknown'), 'error');
+      } catch (e) { showNotification('Error: ' + e.message, 'error'); }
     }
 
-    async function diagnoseAgent(id, name) {
-      try {
-        const r = await fetch(API + '/agents/' + id + '/diagnose', { method: 'POST' });
-        const data = await r.json();
-        if (data.error) { alert('Error: ' + data.error); return; }
-        let msg = 'Diagnose: ' + name + '\n\n';
-        for (const c of data.checks) msg += c.name + ': ' + c.stdout + '\n';
-        alert(msg);
-      } catch (e) { alert('Error: ' + e.message); }
+    function showNotification(msg, type) {
+      var el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:16px;right:16px;padding:12px 20px;border-radius:8px;font-size:14px;z-index:1000;animation:fadeIn 0.3s;' +
+        (type === 'error' ? 'background:#3d1214;color:#f85149;border:1px solid #f85149;' : 'background:#0d3117;color:#3fb950;border:1px solid #3fb950;');
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(function() { el.remove(); }, 4000);
     }
 
-    async function load() {
+    // --- Fleet page ---
+    async function loadFleet() {
       try {
-        const [agents, audit, policy] = await Promise.all([
-          fetch(API + '/agents').then(r => r.json()),
-          fetch(API + '/audit?limit=30').then(r => r.json()),
-          fetch(API + '/policy').then(r => r.json()),
+        var [agents, audit, policy] = await Promise.all([
+          fetch(API + '/agents').then(function(r) { return r.json(); }),
+          fetch(API + '/audit?limit=30').then(function(r) { return r.json(); }),
+          fetch(API + '/policy').then(function(r) { return r.json(); }),
         ]);
+        fleetData = { agents: agents, audit: audit, policy: policy };
         document.getElementById('agents-grid').innerHTML = agents.map(renderAgent).join('');
         document.getElementById('policy-section').innerHTML = renderPolicy(policy);
         renderAudit(audit);
         document.getElementById('loading').style.display = 'none';
-        document.getElementById('content').style.display = 'block';
+        document.getElementById('fleet-page').style.display = 'block';
       } catch (err) {
         document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
       }
     }
 
-    load();
-    setInterval(load, 15000);
+    function showFleet() {
+      document.getElementById('fleet-page').style.display = 'block';
+      document.getElementById('detail-page').style.display = 'none';
+      currentAgent = null;
+      window.location.hash = '';
+      startAutoRefresh();
+    }
+
+    // --- Agent detail page ---
+    async function showAgent(id) {
+      document.getElementById('fleet-page').style.display = 'none';
+      document.getElementById('detail-page').style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+      stopAutoRefresh();
+      window.location.hash = '#agent/' + id;
+
+      var agent = fleetData.agents.find(function(a) { return a.id === id; });
+      if (!agent) {
+        var r = await fetch(API + '/agents/' + id);
+        agent = await r.json();
+      }
+      currentAgent = agent;
+
+      // Render header
+      var tags = (agent.tags || []).map(function(t) { return '<span class="tag">' + t + '</span>'; }).join(' ') || '<span class="tag">none</span>';
+      document.getElementById('detail-header').innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0">' +
+          '<div><h2 style="margin-bottom:4px">' + agent.name + ' <span class="' + statusClass(agent.status) + '">' + agent.status + '</span></h2>' +
+          '<span style="color:#8b949e">' + agent.role + ' &middot; ' + agent.tailscaleIp + ' &middot; ' + agent.user + '</span></div>' +
+          '<div style="display:flex;gap:8px">' +
+            '<button class="btn" onclick="restartAgent(\'' + agent.id + '\',\'' + agent.name + '\')">&#x1f504; Restart</button>' +
+            '<button class="btn" onclick="loadDiagnose(\'' + agent.id + '\')">&#x1f9ea; Diagnose</button>' +
+          '</div>' +
+        '</div>';
+
+      switchTab('overview');
+      loadOverview(agent);
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+      var tabs = document.querySelectorAll('.tab');
+      for (var t of tabs) { if (t.textContent.toLowerCase() === name || t.textContent.toLowerCase().replace(' ', '') === name) t.classList.add('active'); }
+      var el = document.getElementById('tab-' + name);
+      if (el) el.classList.add('active');
+
+      if (name === 'logs' && currentAgent) loadLogs(currentAgent.id);
+      if (name === 'config' && currentAgent) loadConfig(currentAgent.id);
+      if (name === 'health' && currentAgent) loadHealth(currentAgent.id);
+    }
+
+    async function loadOverview(agent) {
+      var el = document.getElementById('tab-overview');
+      el.innerHTML = '<div class="loading">Loading status...</div>';
+      try {
+        var r = await fetch(API + '/agents/' + agent.id + '/diagnose', { method: 'POST' });
+        var data = await r.json();
+        if (data.error) { el.innerHTML = '<p style="color:#f85149">Error: ' + data.error + '</p>'; return; }
+
+        var html = '<div class="stat-grid">';
+        for (var c of data.checks) {
+          var color = c.name === 'systemd' ? (c.stdout === 'active' ? '#3fb950' : '#f85149') : '#e1e4e8';
+          html += '<div class="stat-card"><div class="stat-value" style="color:' + color + ';font-size:16px">' + escapeHtml(c.stdout.split('\n')[0]) + '</div><div class="stat-label">' + c.name + '</div></div>';
+        }
+        html += '</div>';
+
+        // Agent metadata
+        html += '<div class="card" style="margin-top:16px"><h3>Agent Info</h3>';
+        var fields = [
+          ['ID', agent.id], ['Name', agent.name], ['Host', agent.host],
+          ['Tailscale IP', agent.tailscaleIp], ['User', agent.user], ['Role', agent.role],
+          ['Created', new Date(agent.createdAt).toLocaleString()],
+          ['Updated', new Date(agent.updatedAt).toLocaleString()],
+        ];
+        for (var f of fields) {
+          html += '<div class="agent-row"><span class="label">' + f[0] + '</span><span>' + f[1] + '</span></div>';
+        }
+        html += '</div>';
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = '<p style="color:#f85149">Failed to load: ' + err.message + '</p>';
+      }
+    }
+
+    async function loadLogs(id) {
+      var el = document.getElementById('tab-logs');
+      el.innerHTML = '<div class="loading">Loading logs...</div>';
+      try {
+        var r = await fetch(API + '/agents/' + id + '/logs?lines=200');
+        var data = await r.json();
+        if (data.error) { el.innerHTML = '<p style="color:#f85149">Error: ' + data.error + '</p>'; return; }
+        // Color log lines
+        var lines = (data.logs || '').split('\n').map(function(line) {
+          if (line.includes('ERROR') || line.includes('error')) return '<span style="color:#f85149">' + escapeHtml(line) + '</span>';
+          if (line.includes('WARN') || line.includes('warn')) return '<span style="color:#d29922">' + escapeHtml(line) + '</span>';
+          if (line.includes('[ws]')) return '<span style="color:#8b949e">' + escapeHtml(line) + '</span>';
+          return escapeHtml(line);
+        }).join('\n');
+        el.innerHTML = '<div style="margin-bottom:8px"><button class="btn" onclick="loadLogs(\'' + id + '\')">&#x1f504; Refresh</button> <span style="color:#8b949e;font-size:12px">Last 200 lines</span></div><div class="log-box">' + lines + '</div>';
+      } catch (err) {
+        el.innerHTML = '<p style="color:#f85149">Failed: ' + err.message + '</p>';
+      }
+    }
+
+    async function loadConfig(id) {
+      var el = document.getElementById('tab-config');
+      el.innerHTML = '<div class="loading">Loading config...</div>';
+      try {
+        var r = await fetch(API + '/agents/' + id + '/config');
+        var data = await r.json();
+        if (data.error) { el.innerHTML = '<p style="color:#f85149">Error: ' + data.error + '</p>'; return; }
+
+        var html = '<h3 style="margin-bottom:8px;color:#8b949e">openclaw.json</h3>';
+        html += '<div class="config-box">' + escapeHtml(JSON.stringify(data.config, null, 2)) + '</div>';
+
+        if (data.status && data.status.gateway) {
+          html += '<h3 style="margin:16px 0 8px;color:#8b949e">OpenClaw Status</h3>';
+          // Pull out key fields
+          var s = data.status;
+          var statusInfo = {
+            version: s.gateway && s.gateway.self ? s.gateway.self.version : 'unknown',
+            platform: s.os ? s.os.label : 'unknown',
+            gateway: s.gateway ? (s.gateway.reachable ? 'reachable' : 'unreachable') : 'unknown',
+            sessions: s.sessions ? s.sessions.count : 0,
+            memory: s.memory ? (s.memory.files + ' files, ' + s.memory.chunks + ' chunks') : 'N/A',
+            model: s.sessions && s.sessions.defaults ? s.sessions.defaults.model : 'unknown',
+          };
+          html += '<div class="stat-grid">';
+          for (var k in statusInfo) {
+            html += '<div class="stat-card"><div class="stat-value" style="font-size:14px">' + statusInfo[k] + '</div><div class="stat-label">' + k + '</div></div>';
+          }
+          html += '</div>';
+
+          // Full status JSON (collapsed)
+          html += '<details style="margin-top:8px"><summary style="cursor:pointer;color:#58a6ff;font-size:13px">Full status JSON</summary>';
+          html += '<div class="config-box" style="margin-top:8px">' + escapeHtml(JSON.stringify(data.status, null, 2)) + '</div></details>';
+        }
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = '<p style="color:#f85149">Failed: ' + err.message + '</p>';
+      }
+    }
+
+    async function loadHealth(id) {
+      var el = document.getElementById('tab-health');
+      el.innerHTML = '<div class="loading">Loading health history...</div>';
+      try {
+        var r = await fetch(API + '/agents/' + id + '/health-history');
+        var data = await r.json();
+        if (data.length === 0) {
+          el.innerHTML = '<p style="color:#8b949e">No health history recorded yet. Run <code>clawctl agents status</code> or <code>clawctl watch</code> to start recording.</p>';
+          return;
+        }
+
+        // Timeline visualization
+        var html = '<h3 style="margin-bottom:8px;color:#8b949e">Status Timeline (last ' + data.length + ' checks)</h3>';
+        html += '<div class="health-timeline">';
+        for (var entry of data.reverse()) {
+          var s = entry.meta && entry.meta.success ? 'online' : 'offline';
+          var title = new Date(entry.timestamp).toLocaleString() + ' — ' + s;
+          html += '<div class="health-dot ' + s + '" title="' + title + '"></div>';
+        }
+        html += '</div>';
+
+        // Table
+        html += '<table style="margin-top:16px"><thead><tr><th>Time</th><th>Status</th><th>Error</th></tr></thead><tbody>';
+        for (var entry of data) {
+          var success = entry.meta && entry.meta.success;
+          var statusText = success ? '<span style="color:#3fb950">online</span>' : '<span style="color:#f85149">offline</span>';
+          var error = (entry.meta && entry.meta.error) || '-';
+          html += '<tr><td>' + new Date(entry.timestamp).toLocaleString() + '</td><td>' + statusText + '</td><td>' + escapeHtml(String(error)) + '</td></tr>';
+        }
+        html += '</tbody></table>';
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = '<p style="color:#f85149">Failed: ' + err.message + '</p>';
+      }
+    }
+
+    async function loadDiagnose(id) {
+      switchTab('overview');
+      if (currentAgent) loadOverview(currentAgent);
+    }
+
+    function escapeHtml(text) {
+      var d = document.createElement('div');
+      d.textContent = text;
+      return d.innerHTML;
+    }
+
+    // --- Auto-refresh ---
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      refreshTimer = setInterval(loadFleet, 15000);
+    }
+    function stopAutoRefresh() {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    }
+
+    // --- Router ---
+    async function route() {
+      var hash = window.location.hash;
+      if (hash.startsWith('#agent/')) {
+        var id = hash.replace('#agent/', '');
+        await loadFleet();
+        showAgent(id);
+      } else {
+        await loadFleet();
+        showFleet();
+      }
+    }
+
+    window.addEventListener('hashchange', route);
+    route();
   </script>
 </body>
 </html>

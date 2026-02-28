@@ -118,6 +118,50 @@ export async function startDashboard(port: number): Promise<void> {
         } finally {
           ssh.disconnect();
         }
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/logs') && req.method === 'GET') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        const lines = parseInt(url.searchParams.get('lines') ?? '100', 10);
+        const { SshClient } = await import('../ssh/index.js');
+        const ssh = new SshClient(agent.sshKeyPath);
+        try {
+          await ssh.connect(agent);
+          const result = await ssh.exec(`tail -n ${lines} /tmp/openclaw/*.log 2>/dev/null || journalctl --user -u openclaw-gateway.service -n ${lines} --no-pager 2>/dev/null || echo "No logs found"`);
+          json(res, { logs: result.stdout });
+        } catch (err) {
+          json(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+        } finally {
+          ssh.disconnect();
+        }
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/config') && req.method === 'GET') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        const { SshClient } = await import('../ssh/index.js');
+        const ssh = new SshClient(agent.sshKeyPath);
+        try {
+          await ssh.connect(agent);
+          const configRes = await ssh.exec('cat ~/.openclaw/openclaw.json 2>/dev/null || echo "{}"');
+          const statusRes = await ssh.exec('source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json 2>/dev/null || echo "{}"');
+          let config = {};
+          let status = {};
+          try { config = JSON.parse(configRes.stdout); } catch {}
+          try { status = JSON.parse(statusRes.stdout); } catch {}
+          json(res, { config, status });
+        } catch (err) {
+          json(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+        } finally {
+          ssh.disconnect();
+        }
+      } else if (path.startsWith('/api/agents/') && path.endsWith('/health-history') && req.method === 'GET') {
+        const id = path.split('/')[3];
+        const agent = await store.get(id);
+        if (!agent) { json(res, { error: 'Not found' }, 404); return; }
+        // Pull health history from audit log
+        const entries = await auditStore.query({ action: 'agent.status' as any, limit: 100 });
+        const agentEntries = entries.filter((e: any) => e.meta?.agentId === id);
+        json(res, agentEntries);
       } else {
         // Try static files
         const served = await serveStatic(res, staticDir, path);
