@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v gitleaks &>/dev/null; then
+  echo "gitleaks not found. Install it: brew install gitleaks"
+  exit 1
+fi
+
+gitleaks protect --staged --verbose

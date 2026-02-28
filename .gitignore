@@ -1,3 +1,5 @@
+dist/
+
 # Logs
 logs
 *.log
@@ -69,6 +71,10 @@ web_modules/
 .env
 .env.*
 !.env.example
+
+# Private keys
+*.key
+*.pem
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

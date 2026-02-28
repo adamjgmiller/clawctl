@@ -1,0 +1,43 @@
+{
+  "name": "clawctl",
+  "version": "0.1.0",
+  "description": "Agent-native control plane for managing OpenClaw fleets",
+  "type": "module",
+  "bin": {
+    "clawctl": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'"
+  },
+  "keywords": ["openclaw", "agent", "fleet", "control-plane"],
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.750.0",
+    "@aws-sdk/client-ec2": "^3.750.0",
+    "@aws-sdk/client-secrets-manager": "^3.750.0",
+    "@aws-sdk/client-ssm": "^3.750.0",
+    "@aws-sdk/credential-providers": "^3.750.0",
+    "commander": "^13.1.0",
+    "node-ssh": "^13.2.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.21.0",
+    "@types/node": "^22.13.0",
+    "eslint": "^9.21.0",
+    "eslint-config-prettier": "^10.0.1",
+    "prettier": "^3.5.3",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.1"
+  }
+}

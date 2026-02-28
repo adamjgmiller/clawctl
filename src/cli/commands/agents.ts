@@ -1,0 +1,278 @@
+import { Command } from 'commander';
+import {
+  CreateAgentInputSchema,
+  FreshDeployInputSchema,
+  AdoptDeployInputSchema,
+} from '../../types/index.js';
+import { JsonAgentStore } from '../../registry/index.js';
+import type { AgentStore } from '../../registry/index.js';
+import { getAgentStatus, formatStatusTable } from '../../health/index.js';
+import { loadConfig } from '../../config/index.js';
+import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
+
+function createStore(): AgentStore {
+  return new JsonAgentStore();
+}
+
+export function createAgentsCommand(): Command {
+  const agents = new Command('agents').description('Manage OpenClaw agents');
+
+  agents
+    .command('list')
+    .description('List all registered agents')
+    .option('--json', 'Output as JSON')
+    .action(async (opts: { json?: boolean }) => {
+      const store = createStore();
+      const list = await store.list();
+
+      if (opts.json) {
+        console.log(JSON.stringify(list, null, 2));
+        return;
+      }
+
+      if (list.length === 0) {
+        console.log('No agents registered. Use "clawctl agents add" to register one.');
+        return;
+      }
+
+      const header = ['ID', 'NAME', 'HOST', 'ROLE', 'STATUS'];
+      const rows = list.map((a) => [a.id, a.name, a.host, a.role, a.status]);
+      const allRows = [header, ...rows];
+      const widths = header.map((_, i) => Math.max(...allRows.map((r) => r[i].length)));
+      const fmt = (row: string[]) => row.map((c, i) => c.padEnd(widths[i])).join('  ');
+      const sep = widths.map((w) => '-'.repeat(w)).join('  ');
+      console.log([fmt(header), sep, ...rows.map(fmt)].join('\n'));
+    });
+
+  agents
+    .command('add')
+    .description('Register a new agent')
+    .requiredOption('--name <name>', 'Agent name')
+    .requiredOption('--host <host>', 'Agent hostname (display)')
+    .requiredOption('--tailscale-ip <ip>', 'Tailscale IP address')
+    .requiredOption('--role <role>', 'Agent role (orchestrator, worker, monitor, gateway)')
+    .option('--user <user>', 'SSH user', 'openclaw')
+    .option('--tags <tags>', 'Comma-separated tags')
+    .option('--aws-instance-id <id>', 'AWS EC2 instance ID')
+    .option('--aws-region <region>', 'AWS region')
+    .action(
+      async (opts: {
+        name: string;
+        host: string;
+        tailscaleIp: string;
+        role: string;
+        user: string;
+        tags?: string;
+        awsInstanceId?: string;
+        awsRegion?: string;
+      }) => {
+        const input = CreateAgentInputSchema.parse({
+          name: opts.name,
+          host: opts.host,
+          tailscaleIp: opts.tailscaleIp,
+          role: opts.role,
+          user: opts.user,
+          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+          awsInstanceId: opts.awsInstanceId,
+          awsRegion: opts.awsRegion,
+        });
+
+        const store = createStore();
+        const agent = await store.add(input);
+        console.log(`Agent registered: ${agent.name} (${agent.id})`);
+      },
+    );
+
+  agents
+    .command('remove')
+    .description('Remove an agent by ID')
+    .argument('<id>', 'Agent ID')
+    .action(async (id: string) => {
+      const store = createStore();
+      const removed = await store.remove(id);
+      if (removed) {
+        console.log(`Agent ${id} removed.`);
+      } else {
+        console.error(`Agent ${id} not found.`);
+        process.exitCode = 1;
+      }
+    });
+
+  agents
+    .command('status')
+    .description('Check agent health via SSH')
+    .argument('[id]', 'Agent ID (omit for all)')
+    .option('--json', 'Output as JSON')
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
+      const store = createStore();
+      let agents;
+
+      if (id) {
+        const agent = await store.get(id);
+        if (!agent) {
+          console.error(`Agent ${id} not found.`);
+          process.exitCode = 1;
+          return;
+        }
+        agents = [agent];
+      } else {
+        agents = await store.list();
+        if (agents.length === 0) {
+          console.log('No agents registered.');
+          return;
+        }
+      }
+
+      const results = await Promise.allSettled(agents.map((a) => getAgentStatus(a)));
+      const statuses = results.map((r, i) =>
+        r.status === 'fulfilled'
+          ? r.value
+          : { agent: agents[i], reachable: false as const, error: String(r.reason) },
+      );
+
+      if (opts.json) {
+        console.log(JSON.stringify(statuses, null, 2));
+      } else {
+        console.log(formatStatusTable(statuses));
+      }
+    });
+
+  const deploy = new Command('deploy').description('Deploy a new agent');
+
+  deploy
+    .command('fresh')
+    .description('Provision a new EC2 instance and deploy OpenClaw')
+    .requiredOption('--name <name>', 'Agent name')
+    .requiredOption('--role <role>', 'Agent role (orchestrator, worker, monitor, gateway)')
+    .option('--tags <tags>', 'Comma-separated tags')
+    .option('--ami <ami>', 'EC2 AMI ID (overrides config)')
+    .option('--instance-type <type>', 'EC2 instance type (overrides config)')
+    .option('--key-pair <name>', 'EC2 key pair name (overrides config)')
+    .option('--security-group <id>', 'EC2 security group ID (overrides config)')
+    .option('--subnet-id <id>', 'EC2 subnet ID (overrides config)')
+    .option(
+      '--tailscale-auth-key <key>',
+      'Tailscale auth key (overrides TAILSCALE_AUTH_KEY env var)',
+    )
+    .option('--ssh-user <user>', 'SSH user for bootstrap', 'ubuntu')
+    .option('--ssh-key-path <path>', 'SSH private key path')
+    .option('--config <path>', 'Path to openclaw.json (overrides template)')
+    .option('--env <path>', 'Path to .env file (overrides template)')
+    .action(
+      async (opts: {
+        name: string;
+        role: string;
+        tags?: string;
+        ami?: string;
+        instanceType?: string;
+        keyPair?: string;
+        securityGroup?: string;
+        subnetId?: string;
+        tailscaleAuthKey?: string;
+        sshUser: string;
+        sshKeyPath?: string;
+        config?: string;
+        env?: string;
+      }) => {
+        const cfg = await loadConfig();
+        const tailscaleAuthKey =
+          opts.tailscaleAuthKey ?? process.env.TAILSCALE_AUTH_KEY;
+
+        if (!tailscaleAuthKey) {
+          console.error(
+            'Tailscale auth key required: pass --tailscale-auth-key or set TAILSCALE_AUTH_KEY',
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const ami = opts.ami ?? cfg.ec2Ami;
+        if (!ami) {
+          console.error('EC2 AMI required: pass --ami or set ec2Ami in config');
+          process.exitCode = 1;
+          return;
+        }
+
+        const keyPair = opts.keyPair ?? cfg.ec2KeyPair;
+        if (!keyPair) {
+          console.error('EC2 key pair required: pass --key-pair or set ec2KeyPair in config');
+          process.exitCode = 1;
+          return;
+        }
+
+        const securityGroup = opts.securityGroup ?? cfg.ec2SecurityGroup;
+        if (!securityGroup) {
+          console.error(
+            'EC2 security group required: pass --security-group or set ec2SecurityGroup in config',
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        const input = FreshDeployInputSchema.parse({
+          name: opts.name,
+          role: opts.role,
+          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+          ami,
+          instanceType: opts.instanceType ?? cfg.ec2InstanceType,
+          keyPair,
+          securityGroup,
+          subnetId: opts.subnetId ?? cfg.ec2SubnetId,
+          tailscaleAuthKey,
+          sshUser: opts.sshUser,
+          sshKeyPath: opts.sshKeyPath,
+          configPath: opts.config,
+          envPath: opts.env,
+        });
+
+        const store = createStore();
+        await freshDeploy(input, store, {
+          onStep: (msg) => console.log(`  → ${msg}`),
+        });
+      },
+    );
+
+  deploy
+    .command('adopt')
+    .description('Adopt an existing Tailscale-reachable server into the fleet')
+    .requiredOption('--name <name>', 'Agent name')
+    .requiredOption('--tailscale-ip <ip>', 'Tailscale IP address')
+    .requiredOption('--role <role>', 'Agent role (orchestrator, worker, monitor, gateway)')
+    .option('--host <host>', 'Display hostname (defaults to tailscale-ip)')
+    .option('--user <user>', 'SSH user', 'openclaw')
+    .option('--tags <tags>', 'Comma-separated tags')
+    .option('--aws-instance-id <id>', 'AWS EC2 instance ID')
+    .option('--aws-region <region>', 'AWS region')
+    .action(
+      async (opts: {
+        name: string;
+        tailscaleIp: string;
+        role: string;
+        host?: string;
+        user: string;
+        tags?: string;
+        awsInstanceId?: string;
+        awsRegion?: string;
+      }) => {
+        const input = AdoptDeployInputSchema.parse({
+          name: opts.name,
+          tailscaleIp: opts.tailscaleIp,
+          host: opts.host,
+          role: opts.role,
+          user: opts.user,
+          tags: opts.tags ? opts.tags.split(',').map((t) => t.trim()) : [],
+          awsInstanceId: opts.awsInstanceId,
+          awsRegion: opts.awsRegion,
+        });
+
+        const store = createStore();
+        await adoptDeploy(input, store, {
+          onStep: (msg) => console.log(`  → ${msg}`),
+        });
+      },
+    );
+
+  agents.addCommand(deploy);
+
+  return agents;
+}
