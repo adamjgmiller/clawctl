@@ -1,199 +1,206 @@
 # clawctl
 
-Agent-native control plane for managing OpenClaw fleets. Not just infra tooling — an intelligence layer that reasons about fleet state, diagnoses issues, enforces policy, and takes corrective action with human-in-the-loop for sensitive operations.
+Agent-native control plane for managing [OpenClaw](https://openclaw.ai) fleets. Not just infra tooling — an intelligence layer that reasons about fleet state, diagnoses issues, enforces policy, and takes corrective action with human-in-the-loop for sensitive operations.
+
+**License:** AGPL-3.0 — open core, dual-licensed for hosted deployments.
+
+## What Makes It Different
+
+| Tool | Focus |
+|------|-------|
+| claworc | Reverse proxy + auth |
+| openclaw-fleet | Declarative YAML manifests |
+| openclaw-mission-control | Dashboard UI |
+| **clawctl** | **Agent intelligence + secrets + policy + alerting** |
 
 ## Architecture
 
-Six core components:
+- **Agent Registry** — catalog of managed agents (local JSON, DynamoDB-ready)
+- **Secrets Vault** — AES-256-GCM encrypted, per-agent scoping, push to remote `.env`
+- **Policy Engine** — rules file gates operations (deny/allow/confirm) with agent field conditions
+- **Audit Log** — append-only JSON + DynamoDB store wired into every operation
+- **Health Monitor** — SSH-based status checks, diagnose, watch with alerts
+- **Dashboard** — REST API + dark-themed SPA at `clawctl dashboard start`
+- **Alerting** — Telegram notifications on state changes (offline/degraded/recovered)
 
-1. **Agent Registry** — catalog of managed agents (local JSON initially, DynamoDB later)
-2. **Secrets Vault** — encrypted store via AWS Secrets Manager with per-agent scoping
-3. **Policy Engine** — rules for agent permissions (spending limits, channels, escalation, tools)
-4. **Command Layer** — CLI + agent interface (deploy, configure, update, restart, monitor)
-5. **Audit Log** — immutable record of actions (DynamoDB append-only)
-6. **Health Monitor** — heartbeat tracking, log aggregation, alerting
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js >= 20
-- SSH key at `~/.ssh/id_ed25519` (configurable)
-- Tailscale for agent connectivity
-- AWS credentials (for Phases 2+)
-
-### Install
+## Install
 
 ```bash
+git clone https://github.com/adamjgmiller/clawctl
+cd clawctl
 npm install
 npm run build
-npm link  # makes `clawctl` available globally
+npm link   # or: alias clawctl="node /path/to/clawctl/dist/cli/index.js"
 ```
 
-### Initialize
+## Setup
 
 ```bash
-clawctl init
-```
-
-Interactively sets up `~/.clawctl/` with config and templates directory. Prompts for AWS region, SSH key path, default SSH user, and AWS profile. If already initialized, shows current config and offers to update.
-
-### Configure
-
-Configuration lives at `~/.clawctl/config.json` and is auto-created on first run (or via `clawctl init`):
-
-```json
-{
-  "awsProfile": "default",
-  "awsRegion": "us-east-1",
-  "sshKeyPath": "~/.ssh/id_ed25519",
-  "sshUser": "openclaw",
-  "agentsFilename": "agents.json"
-}
-```
-
-### Add an Agent
-
-```bash
+clawctl init                    # create ~/.clawctl/ with config + templates
 clawctl agents add \
-  --name my-worker \
-  --host worker-1.example.com \
-  --tailscale-ip 100.64.0.1 \
+  --name my-agent \
+  --host myhost.ts.net \
+  --tailscale-ip 100.x.y.z \
+  --role worker \
+  --user openclaw
+```
+
+## Commands
+
+### Agents
+
+```bash
+clawctl agents list                         # list all agents
+clawctl agents add --name ... --host ...    # register an agent
+clawctl agents info <id>                    # detailed agent info
+clawctl agents update <id> --role worker    # update fields
+clawctl agents remove <id>                  # deregister
+clawctl agents status [id]                  # SSH health check (all or one)
+clawctl agents status [id] --verbose        # full openclaw status
+clawctl agents logs <id>                    # tail gateway logs
+clawctl agents logs <id> --follow           # live log tail
+clawctl agents diagnose <id>                # systemd + logs + disk + memory report
+clawctl agents diagnose <id> --fix          # diagnose + auto-restart if stopped
+```
+
+### Config
+
+```bash
+clawctl config push <id>                    # SCP openclaw.json + .env → agent, restart gateway
+clawctl config pull <id>                    # fetch remote config to ~/.clawctl/pulled/
+clawctl config diff <id>                    # show drift vs local templates
+clawctl config diff --all                   # diff all agents
+```
+
+### Secrets
+
+```bash
+clawctl secrets set <key> <value>           # store encrypted secret
+clawctl secrets set <key> <value> --agent <id>  # per-agent secret
+clawctl secrets get <key>                   # retrieve secret
+clawctl secrets list                        # list all secrets
+clawctl secrets delete <key>                # remove secret
+clawctl secrets push <id>                   # write agent's secrets to remote .env
+```
+
+### Policy
+
+```bash
+clawctl policy list                         # show all rules
+clawctl policy check <action> [agent-id]    # test if action would be allowed
+clawctl policy init                         # write default policy to ~/.clawctl/policy.json
+clawctl policy add --id <id> \
+  --action "config.push" --effect deny \
+  --condition "role:eq:worker"              # add a rule
+clawctl policy remove <id>                  # remove a rule
+```
+
+Policy rules use action patterns (`agent.*`, `config.push`, `*`) and conditions on agent fields (`role`, `status`, `tags`, `name`). Enforcement is automatic on `config push` and `secrets push`.
+
+### Dashboard
+
+```bash
+clawctl dashboard start                     # start API + UI on port 3100
+clawctl dashboard start --port 8080
+```
+
+Open `http://localhost:3100` for the fleet dashboard (dark theme, agent cards, audit log, policy rules, auto-refresh 15s).
+
+API endpoints:
+- `GET /api/agents` — fleet list
+- `GET /api/agents/:id` — single agent
+- `GET /api/audit?limit=50` — recent audit log
+- `GET /api/policy` — current policy
+- `GET /api/health` — server health check
+
+### Alerting
+
+```bash
+clawctl alerts status                       # show alert config
+clawctl alerts set-telegram \
+  --bot-token <token> \
+  --chat-id <chat-id>                       # configure Telegram alerts
+clawctl alerts enable / disable             # toggle alerting
+clawctl alerts test --severity critical     # send test alert
+```
+
+### Fleet Watch
+
+```bash
+clawctl watch                               # poll every 60s, print status table, alert on changes
+clawctl watch --interval 30                 # poll every 30s
+```
+
+### Network (Tailscale)
+
+```bash
+clawctl network status                      # tailnet overview
+clawctl network list                        # list devices
+clawctl network tag <device-id> <tags...>   # tag a device
+```
+
+### Deploy
+
+```bash
+# Adopt an existing Tailscale-reachable server
+clawctl agents deploy adopt \
+  --name my-agent \
+  --tailscale-ip 100.x.y.z \
   --role worker
+
+# Provision a fresh EC2 instance (requires AWS creds + Tailscale auth key)
+clawctl agents deploy fresh \
+  --name my-agent \
+  --role worker \
+  --ami ami-xxx \
+  --key-pair my-key \
+  --security-group sg-xxx
 ```
 
-### Check Status
+## Configuration
+
+All config lives in `~/.clawctl/`:
+
+| File | Purpose |
+|------|---------|
+| `config.json` | clawctl settings (EC2 defaults, SSH key, tailnet) |
+| `agents.json` | Agent registry |
+| `secrets.json` | AES-256-GCM encrypted secrets vault |
+| `policy.json` | Policy rules |
+| `alerts.json` | Alert channel config |
+| `audit.json` | Local audit log |
+| `templates/` | Deploy templates (openclaw.json, .env) |
+
+Environment variables: `TAILSCALE_API_KEY`, `TAILSCALE_TAILNET`, `TAILSCALE_AUTH_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
+
+## OpenClaw Skill
+
+Install the clawctl skill into any OpenClaw agent so it can manage the fleet conversationally:
 
 ```bash
-clawctl agents list
-clawctl agents status              # SSH health check on all agents
-clawctl agents status <id>         # Check a specific agent
-clawctl agents status --verbose    # Detailed output (version, uptime, model, channels)
-clawctl agents status --json       # JSON output
+bash skill/install.sh
 ```
 
-## CLI Reference
+Then your agent can handle requests like:
+- "Check the status of all fleet agents"
+- "Diagnose the cs-bot agent"
+- "Push config to the worker agents"
+- "Show me the audit log"
 
-### init
-
-```
-clawctl init    Interactive setup of ~/.clawctl/ directory and config
-```
-
-### agents
-
-```
-clawctl agents list [--json]                                       List registered agents
-clawctl agents add --name --host --tailscale-ip --role [options]   Register an agent
-clawctl agents remove <id>                                         Remove an agent
-clawctl agents info <id> [--json]                                  Show detailed agent info
-clawctl agents update <id> [--name] [--host] [--role] [...]        Update agent fields
-clawctl agents status [id] [--json] [--verbose] [--ssh-key]        Check agent health via SSH
-clawctl agents logs <id> [--lines N] [--follow]                    Tail openclaw gateway logs
-```
-
-#### agents add options
-
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--name` | yes | Agent name |
-| `--host` | yes | Hostname (display) |
-| `--tailscale-ip` | yes | Tailscale IPv4 address |
-| `--role` | yes | `orchestrator`, `worker`, `monitor`, or `gateway` |
-| `--user` | no | SSH user (default: `openclaw`) |
-| `--tags` | no | Comma-separated tags |
-| `--ssh-key` | no | SSH private key path for this agent |
-| `--aws-instance-id` | no | EC2 instance ID |
-| `--aws-region` | no | AWS region |
-
-#### agents info
-
-Show all stored fields for an agent:
-
-```bash
-clawctl agents info <id>          # Human-readable output
-clawctl agents info <id> --json   # JSON output
-```
-
-#### agents update
-
-Update one or more fields on an existing agent:
-
-```bash
-clawctl agents update <id> --name new-name --role gateway --tags "prod,us-east"
-```
-
-Supported flags: `--name`, `--host`, `--tailscale-ip`, `--role`, `--user`, `--tags`.
-
-#### agents status
-
-Health checks persist the result (online/offline/degraded) back to the registry, so `agents list` reflects last known state.
-
-```bash
-clawctl agents status                  # Check all agents
-clawctl agents status <id>             # Check one agent
-clawctl agents status --verbose        # Detailed: version, uptime, model, channels
-clawctl agents status --ssh-key ~/.ssh/other_key   # Override SSH key
-```
-
-#### agents logs
-
-Tail the openclaw gateway log from `/tmp/openclaw/` on the agent's host:
-
-```bash
-clawctl agents logs <id>               # Last 50 lines
-clawctl agents logs <id> --lines 100   # Last 100 lines
-clawctl agents logs <id> --follow      # Live tail (Ctrl+C to stop)
-```
-
-### network
-
-Requires `TAILSCALE_API_KEY` and `TAILSCALE_TAILNET` environment variables.
-
-```
-clawctl network status [--json] [--tag <tag>]    List tag:clawctl devices (default)
-clawctl network list [--json]                    List ALL tailnet devices
-clawctl network tag <device-id> <tag>            Add a tag to a device
-```
-
-#### network list
-
-List every device on your tailnet:
-
-```bash
-clawctl network list           # Table output
-clawctl network list --json    # JSON output
-```
-
-#### network tag
-
-Add a Tailscale tag to a device (e.g., to bring it into the clawctl fleet):
-
-```bash
-clawctl network tag <device-id> clawctl
-```
-
-## Development
-
-```bash
-npm run dev -- agents list       # Run CLI via tsx (no build step)
-npm run build                    # Compile TypeScript to dist/
-npm run typecheck                # Type-check without emitting
-npm run lint                     # ESLint
-npm run format                   # Prettier (write)
-npm run format:check             # Prettier (check)
-```
+See `skill/SKILL.md` and `skill/examples.md` for full documentation.
 
 ## Roadmap
 
-See [PLAN.md](./PLAN.md) for the full roadmap:
-
-- **Phase 1** (current): Foundation — registry, CLI, SSH, health checks, AWS setup, Tailscale integration
-- **Phase 2**: Config & Secrets — vault, config sync, drift detection
-- **Phase 3**: Intelligence Layer — reasoning agent, policy engine, audit log
-- **Phase 4**: Web Dashboard — fleet overview, agent detail, audit viewer
-- **Phase 5**: Fleet Operations — EC2 provisioning, SSM, rolling updates, alerting
-
-## License
-
-AGPL-3.0 — see [LICENSE](./LICENSE).
+- [x] Agent registry + CLI
+- [x] SSH health checks, log tailing, diagnose
+- [x] Config sync + drift detection
+- [x] Secrets vault (local AES-256-GCM, push to agents)
+- [x] Policy engine with enforcement
+- [x] Audit log (local JSON + DynamoDB)
+- [x] Web dashboard (REST API + SPA)
+- [x] Alerting (Telegram) + fleet watch
+- [ ] SSM integration (remote commands without SSH)
+- [ ] Rolling updates across fleet
+- [ ] CloudWatch log aggregation
+- [ ] DynamoDB registry + secrets (production mode)
+- [ ] Dashboard action buttons (restart, sync config)
