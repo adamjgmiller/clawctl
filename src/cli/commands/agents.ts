@@ -259,6 +259,19 @@ export function createAgentsCommand(): Command {
           : { agent: agentsList[i], reachable: false as const, error: String(r.reason) },
       );
 
+      // Persist status back to the registry
+      for (const s of statuses) {
+        let newStatus: 'online' | 'offline' | 'degraded';
+        if (!s.reachable) {
+          newStatus = 'offline';
+        } else if (s.error) {
+          newStatus = 'degraded';
+        } else {
+          newStatus = 'online';
+        }
+        await store.update(s.agent.id, { status: newStatus });
+      }
+
       if (opts.json) {
         console.log(JSON.stringify(statuses, null, 2));
       } else {
