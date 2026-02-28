@@ -90,6 +90,9 @@ export function createAgentsCommand(): Command {
     .option('--user <user>', 'SSH user', 'openclaw')
     .option('--tags <tags>', 'Comma-separated tags')
     .option('--ssh-key <path>', 'SSH private key path for this agent')
+    .option('--capabilities <caps>', 'Comma-separated capabilities (e.g. research,customer-support,coding)')
+    .option('--description <desc>', 'What this agent does')
+    .option('--session-key <key>', 'OpenClaw session key for messaging this agent')
     .option('--aws-instance-id <id>', 'AWS EC2 instance ID')
     .option('--aws-region <region>', 'AWS region')
     .action(
@@ -103,6 +106,9 @@ export function createAgentsCommand(): Command {
         sshKey?: string;
         awsInstanceId?: string;
         awsRegion?: string;
+        capabilities?: string;
+        description?: string;
+        sessionKey?: string;
       }) => {
         let input;
         try {
@@ -116,6 +122,9 @@ export function createAgentsCommand(): Command {
             sshKeyPath: opts.sshKey,
             awsInstanceId: opts.awsInstanceId,
             awsRegion: opts.awsRegion,
+            capabilities: opts.capabilities ? opts.capabilities.split(',').map(c => c.trim()) : [],
+            description: opts.description,
+            sessionKey: opts.sessionKey,
           });
         } catch (err) {
           for (const line of formatZodError(err)) console.error(line);
@@ -161,6 +170,9 @@ export function createAgentsCommand(): Command {
         fmt('Role', agent.role),
         fmt('Status', agent.status),
         fmt('Tags', agent.tags.length > 0 ? agent.tags.join(', ') : '(none)'),
+        fmt('Capabilities', (agent as any).capabilities?.length > 0 ? (agent as any).capabilities.join(', ') : '(none)'),
+        fmt('Description', (agent as any).description || '(none)'),
+        fmt('Session Key', (agent as any).sessionKey || '(none)'),
       ];
 
       if (agent.sshKeyPath) lines.push(fmt('SSH Key', agent.sshKeyPath));
@@ -200,6 +212,9 @@ export function createAgentsCommand(): Command {
     .option('--user <user>', 'New SSH user')
     .option('--tags <tags>', 'Comma-separated tags (replaces existing)')
     .option('--ssh-key <path>', 'SSH private key path')
+    .option('--capabilities <caps>', 'Comma-separated capabilities')
+    .option('--description <desc>', 'Agent description')
+    .option('--session-key <key>', 'OpenClaw session key')
     .action(
       async (
         id: string,
@@ -211,6 +226,9 @@ export function createAgentsCommand(): Command {
           user?: string;
           tags?: string;
           sshKey?: string;
+          capabilities?: string;
+          description?: string;
+          sessionKey?: string;
         },
       ) => {
         const store = createStore();
@@ -229,6 +247,9 @@ export function createAgentsCommand(): Command {
         if (opts.user !== undefined) raw.user = opts.user;
         if (opts.tags !== undefined) raw.tags = opts.tags.split(',').map((t) => t.trim());
         if (opts.sshKey !== undefined) raw.sshKeyPath = opts.sshKey;
+        if (opts.capabilities !== undefined) raw.capabilities = opts.capabilities.split(',').map((c: string) => c.trim());
+        if (opts.description !== undefined) raw.description = opts.description;
+        if (opts.sessionKey !== undefined) raw.sessionKey = opts.sessionKey;
 
         if (Object.keys(raw).length === 0) {
           console.error('No fields to update. Pass at least one --flag.');
@@ -860,6 +881,7 @@ export function createAgentsCommand(): Command {
           user: opts.user,
           tags: opts.tags ? opts.tags.split(',').map(t => t.trim()) : ['orchestrator'],
           sshKeyPath: opts.sshKey,
+          capabilities: [],
         });
 
         console.log('');

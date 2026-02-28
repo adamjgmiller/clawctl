@@ -36,6 +36,7 @@ export async function adoptDeploy(
     tags: input.tags,
     awsInstanceId: input.awsInstanceId,
     awsRegion: input.awsRegion,
+    capabilities: [],
   });
 
   // 3. Health check

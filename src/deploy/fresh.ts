@@ -121,6 +121,7 @@ export async function freshDeploy(
       tags: input.tags,
       awsInstanceId: instanceId,
       awsRegion: ec2.config.region as string,
+      capabilities: [],
     });
 
     // 8. Health check

@@ -22,6 +22,9 @@ export const AgentSchema = z.object({
   sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
+  capabilities: z.array(z.string()).optional().default([]),
+  description: z.string().optional(),
+  sessionKey: z.string().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -38,6 +41,9 @@ export const CreateAgentInputSchema = z.object({
   sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
+  capabilities: z.array(z.string()).optional().default([]),
+  description: z.string().optional(),
+  sessionKey: z.string().optional(),
 });
 
 export type CreateAgentInput = z.infer<typeof CreateAgentInputSchema>;
@@ -53,6 +59,9 @@ export const UpdateAgentInputSchema = z.object({
   sshKeyPath: z.string().optional(),
   awsInstanceId: z.string().optional(),
   awsRegion: z.string().optional(),
+  capabilities: z.array(z.string()).optional(),
+  description: z.string().optional(),
+  sessionKey: z.string().optional(),
 });
 
 export type UpdateAgentInput = z.infer<typeof UpdateAgentInputSchema>;

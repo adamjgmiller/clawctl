@@ -400,6 +400,7 @@ async function orchestratorWizard(): Promise<void> {
       tailscaleIp,
       role: 'orchestrator',
       user: sshUser,
+      capabilities: [],
       tags: ['orchestrator'],
       sshKeyPath: resolvedKey,
     });
@@ -482,7 +483,8 @@ async function addAgentWizard(): Promise<void> {
     tailscaleIp,
     role: role as any,
     user,
-    tags: [],
+    capabilities: [],
+      tags: [],
     sshKeyPath: sshKey.replace('~', process.env.HOME ?? ''),
   });
 

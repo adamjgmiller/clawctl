@@ -83,3 +83,52 @@ When `--verbose` is used, status includes OpenClaw version, uptime, active model
 - Config push restarts the agent's OpenClaw gateway. Plan for brief downtime.
 - Always diff before pushing config to avoid overwriting remote-only changes.
 - Use `agents status` after any change to confirm the fleet is healthy.
+
+## Task Delegation
+
+As an orchestrator, you can delegate tasks to worker agents.
+
+### Creating and Routing Tasks
+
+```bash
+# Create a task and auto-route to best agent
+clawctl tasks create --title "Research competitor pricing" \
+  --description "Find pricing pages for top 5 DAO infrastructure competitors" \
+  --capabilities research
+
+# See which agent would handle a task (dry run)
+clawctl tasks route --title "Answer customer question about RMI tax" --capabilities customer-support
+
+# Force-assign to a specific agent
+clawctl tasks create --title "Update knowledge base" \
+  --description "Add new FAQ entries about token registration" \
+  --assign cs-bot
+```
+
+### Communicating with Workers
+
+Use OpenClaw's `sessions_send` to talk to workers directly:
+
+```
+sessions_send(sessionKey="agent:main:telegram:...", message="Research competitor pricing and report back")
+```
+
+The `sessionKey` for each agent is stored in the registry (`clawctl agents info <name>`).
+
+### Monitoring Tasks
+
+```bash
+clawctl tasks list                    # all tasks
+clawctl tasks list --status running   # in-progress tasks
+clawctl tasks info <id>               # full task details
+clawctl tasks complete <id> --result "Found 5 competitors..."
+clawctl tasks fail <id> --error "Agent was unreachable"
+```
+
+### Routing Logic
+
+Tasks are routed based on:
+1. **Capability match** — agent capabilities vs required capabilities (10 pts each)
+2. **Text match** — task description mentions agent capabilities (5 pts each)
+3. **Agent status** — online agents preferred (3 pts)
+4. **Session key** — agents with direct messaging get a bonus (2 pts)
