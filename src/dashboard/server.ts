@@ -9,6 +9,7 @@ import { join, extname } from 'node:path';
 import { JsonAgentStore } from '../registry/index.js';
 import { JsonAuditStore } from '../audit/json-store.js';
 import { PolicyEngine } from '../policy/index.js';
+import { attachWebSocket } from './ws.js';
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -178,7 +179,10 @@ export async function startDashboard(port: number): Promise<void> {
     }
   });
 
+  attachWebSocket(server);
+
   server.listen(port, '0.0.0.0', () => {
     console.log(`Dashboard API running on http://0.0.0.0:${port}`);
+    console.log(`WebSocket available on ws://0.0.0.0:${port}`);
   });
 }

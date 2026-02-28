@@ -62,7 +62,7 @@
   <div class="container" id="app">
     <div id="header">
       <h1>&#x1f99e; clawctl Dashboard</h1>
-      <p class="subtitle">Fleet overview</p>
+      <p class="subtitle">Fleet overview <span id="ws-indicator" style="font-size:11px;margin-left:8px;color:#8b949e">&#x25cb; connecting...</span></p>
     </div>
     <div class="loading" id="loading">Loading fleet data...</div>
 
@@ -377,7 +377,68 @@
       return d.innerHTML;
     }
 
-    // --- Auto-refresh ---
+    // --- WebSocket real-time updates ---
+    var ws = null;
+    var wsReconnectTimer = null;
+
+    function connectWs() {
+      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + window.location.host);
+
+      ws.onopen = function() {
+        console.log('[ws] connected');
+        var indicator = document.getElementById('ws-indicator');
+        if (indicator) { indicator.textContent = '\u25cf live'; indicator.style.color = '#3fb950'; }
+      };
+
+      ws.onmessage = function(event) {
+        try {
+          var msg = JSON.parse(event.data);
+          if (msg.type === 'init') {
+            fleetData.agents = msg.data.agents;
+            fleetData.audit = msg.data.audit;
+            renderFleetIfVisible();
+            document.getElementById('loading').style.display = 'none';
+            // Handle initial routing
+            var hash = window.location.hash;
+            if (hash.startsWith('#agent/')) {
+              showAgent(hash.replace('#agent/', ''));
+            } else {
+              document.getElementById('fleet-page').style.display = 'block';
+            }
+          } else if (msg.type === 'update') {
+            if (msg.channel === 'fleet' && msg.data.agents) {
+              fleetData.agents = msg.data.agents;
+              renderFleetIfVisible();
+            }
+            if (msg.channel === 'audit' && msg.data.audit) {
+              fleetData.audit = msg.data.audit;
+              if (document.getElementById('fleet-page').style.display !== 'none') {
+                renderAudit(fleetData.audit);
+              }
+            }
+          }
+        } catch (e) { console.warn('[ws] parse error', e); }
+      };
+
+      ws.onclose = function() {
+        console.log('[ws] disconnected, reconnecting in 3s...');
+        var indicator = document.getElementById('ws-indicator');
+        if (indicator) { indicator.textContent = '\u25cb reconnecting...'; indicator.style.color = '#d29922'; }
+        wsReconnectTimer = setTimeout(connectWs, 3000);
+      };
+
+      ws.onerror = function() { ws.close(); };
+    }
+
+    function renderFleetIfVisible() {
+      if (document.getElementById('fleet-page').style.display !== 'none') {
+        document.getElementById('agents-grid').innerHTML = fleetData.agents.map(renderAgent).join('');
+        renderAudit(fleetData.audit);
+      }
+    }
+
+    // Fallback polling (in case WS fails)
     function startAutoRefresh() {
       stopAutoRefresh();
       refreshTimer = setInterval(loadFleet, 15000);
@@ -391,16 +452,25 @@
       var hash = window.location.hash;
       if (hash.startsWith('#agent/')) {
         var id = hash.replace('#agent/', '');
-        await loadFleet();
+        if (fleetData.agents.length === 0) await loadFleet();
         showAgent(id);
       } else {
-        await loadFleet();
+        if (fleetData.agents.length === 0) await loadFleet();
         showFleet();
       }
     }
 
     window.addEventListener('hashchange', route);
-    route();
+
+    // Start WebSocket connection
+    connectWs();
+    // Also do initial HTTP load as fallback
+    loadFleet().then(function() {
+      var hash = window.location.hash;
+      if (hash.startsWith('#agent/')) {
+        showAgent(hash.replace('#agent/', ''));
+      }
+    });
   </script>
 </body>
 </html>
