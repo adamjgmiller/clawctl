@@ -111,7 +111,7 @@ Orchestrator-to-worker task delegation — create tasks, route them by capabilit
 - [x] `--dispatch` flag on `tasks create` — auto-dispatch after routing
 - [x] Dashboard API: `GET /api/tasks` endpoint
 - [x] Audit integration: `task.create`, `task.dispatch`, `task.complete`, `task.fail` actions
-- [ ] `sessions_send` dispatch path — orchestrator agent sends task conversationally (vs SSH file drop)
-- [ ] Worker HEARTBEAT.md template — auto-check `memory/tasks/` for new tasks on heartbeat
-- [ ] Task timeout enforcement — mark overdue tasks as failed
-- [ ] Dashboard tasks tab — show task list with status/routing in the web UI
+- [x] `sessions_send` dispatch path — documented in skill for orchestrator agent use — orchestrator agent sends task conversationally (vs SSH file drop)
+- [x] Worker HEARTBEAT.md template — auto-check `memory/tasks/` for new tasks on heartbeat
+- [x] Task timeout enforcement — `tasks sweep` command — mark overdue tasks as failed
+- [x] Dashboard tasks tab — fleet overview shows task list with status/routing — show task list with status/routing in the web UI

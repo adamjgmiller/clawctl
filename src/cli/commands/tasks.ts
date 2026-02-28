@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { TaskStore, bestRoute, routeTask, dispatchViaSsh, pollTaskResult } from '../../tasks/index.js';
+import { TaskStore, bestRoute, routeTask, dispatchViaSsh, pollTaskResult, enforceTimeouts } from '../../tasks/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import { audit } from '../../audit/index.js';
 
@@ -309,5 +309,13 @@ export function createTasksCommand(): Command {
       else { console.error('Task not found.'); process.exitCode = 1; }
     });
 
+  tasks
+    .command("sweep")
+    .description("Enforce timeouts on overdue tasks")
+    .action(async () => {
+      const count = await enforceTimeouts();
+      if (count === 0) console.log("No overdue tasks.");
+      else console.log(chalk.yellow(`Timed out ${count} task(s).`));
+    });
   return tasks;
 }
