@@ -13,6 +13,7 @@ import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
 import { audit } from '../../audit/index.js';
+import { alert } from '../../alerting/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
@@ -290,7 +291,18 @@ export function createAgentsCommand(): Command {
         } else {
           newStatus = 'online';
         }
+        const prevStatus = s.agent.status;
         await store.update(s.agent.id, { status: newStatus });
+        // Alert on status change to offline or degraded
+        if (newStatus !== prevStatus) {
+          if (newStatus === 'offline') {
+            await alert('critical', `Agent offline: ${s.agent.name}`, `Agent ${s.agent.name} (${s.agent.tailscaleIp}) is unreachable.`, s.agent.id, s.agent.name);
+          } else if (newStatus === 'degraded') {
+            await alert('warning', `Agent degraded: ${s.agent.name}`, `Agent ${s.agent.name} has errors: ${s.error ?? 'unknown'}`, s.agent.id, s.agent.name);
+          } else if (newStatus === 'online' && prevStatus !== 'unknown') {
+            await alert('info', `Agent recovered: ${s.agent.name}`, `Agent ${s.agent.name} is back online.`, s.agent.id, s.agent.name);
+          }
+        }
         await audit('agent.status', {
           agentId: s.agent.id,
           agentName: s.agent.name,
