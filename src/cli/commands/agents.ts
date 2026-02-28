@@ -8,7 +8,7 @@ import {
 } from '../../types/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
-import { getAgentStatus, formatStatusTable, formatVerboseStatus } from '../../health/index.js';
+import { getAgentStatus, formatStatusTable, formatVerboseStatus, formatLogOutput } from '../../health/index.js';
 import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
@@ -340,11 +340,11 @@ export function createAgentsCommand(): Command {
           // For --follow, stream output directly to stdout
           console.log(chalk.dim(`Tailing logs on ${agent.name} (${agent.tailscaleIp})... Ctrl+C to stop\n`));
           const result = await ssh.exec(cmd);
-          process.stdout.write(result.stdout);
+          process.stdout.write(formatLogOutput(result.stdout));
           if (result.stderr) process.stderr.write(result.stderr);
         } else {
           const result = await ssh.exec(cmd);
-          if (result.stdout) process.stdout.write(result.stdout);
+          if (result.stdout) process.stdout.write(formatLogOutput(result.stdout));
           if (result.stderr) process.stderr.write(result.stderr);
           if (result.code !== 0) process.exitCode = 1;
         }

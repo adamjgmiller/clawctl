@@ -105,6 +105,37 @@ export function formatVerboseStatus(status: Record<string, unknown>): string[] {
   return lines;
 }
 
+export function formatLogLine(raw: string): string {
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const time = obj.time ? new Date(obj.time as string | number).toISOString() : '???';
+    const level = typeof obj.level === 'string' ? obj.level.toUpperCase()
+      : typeof obj.level === 'number' ? levelNumberToName(obj.level)
+      : 'INFO';
+    // OpenClaw logs store the human-readable message in field '1' or 'msg'
+    const message = obj['1'] ?? obj.msg ?? obj.message ?? '';
+    return `[${time}] [${level}] ${message}`;
+  } catch {
+    return raw;
+  }
+}
+
+function levelNumberToName(level: number): string {
+  if (level <= 10) return 'TRACE';
+  if (level <= 20) return 'DEBUG';
+  if (level <= 30) return 'INFO';
+  if (level <= 40) return 'WARN';
+  if (level <= 50) return 'ERROR';
+  return 'FATAL';
+}
+
+export function formatLogOutput(output: string): string {
+  return output
+    .split('\n')
+    .map((line) => (line.trim() ? formatLogLine(line) : line))
+    .join('\n');
+}
+
 export function formatStatusTable(results: AgentStatusResult[]): string {
   const header = ['NAME', 'ROLE', 'HOST', 'TAILSCALE IP', 'REACHABLE', 'STATUS'];
   const rows = results.map((r) => {
