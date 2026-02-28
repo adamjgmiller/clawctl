@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import chalk from 'chalk';
 import {
   CreateAgentInputSchema,
   UpdateAgentInputSchema,
@@ -45,12 +46,26 @@ export function createAgentsCommand(): Command {
       }
 
       const header = ['ID', 'NAME', 'HOST', 'ROLE', 'STATUS'];
-      const rows = list.map((a) => [a.id, a.name, a.host, a.role, a.status]);
-      const allRows = [header, ...rows];
-      const widths = header.map((_, i) => Math.max(...allRows.map((r) => r[i].length)));
-      const fmt = (row: string[]) => row.map((c, i) => c.padEnd(widths[i])).join('  ');
+      const plainRows = list.map((a) => [a.id, a.name, a.host, a.role, a.status]);
+      const coloredRows = list.map((a) => {
+        const statusColor =
+          a.status === 'online' ? chalk.green
+          : a.status === 'offline' ? chalk.red
+          : a.status === 'degraded' ? chalk.yellow
+          : chalk.dim;
+        return [a.id, a.name, a.host, a.role, statusColor(a.status)];
+      });
+      const allPlain = [header, ...plainRows];
+      const widths = header.map((_, i) => Math.max(...allPlain.map((r) => r[i].length)));
+      const fmtPlain = (row: string[]) => row.map((c, i) => c.padEnd(widths[i])).join('  ');
+      const fmtColored = (row: string[], plain: string[]) =>
+        row.map((c, i) => c + ' '.repeat(Math.max(0, widths[i] - plain[i].length))).join('  ');
       const sep = widths.map((w) => '-'.repeat(w)).join('  ');
-      console.log([fmt(header), sep, ...rows.map(fmt)].join('\n'));
+      console.log([
+        fmtPlain(header),
+        sep,
+        ...coloredRows.map((r, i) => fmtColored(r, plainRows[i])),
+      ].join('\n'));
     });
 
   agents

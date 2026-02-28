@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import type { TailscaleDevice } from './types.js';
 
 export interface DeviceConnectivity {
@@ -24,7 +25,7 @@ export function assessConnectivity(device: TailscaleDevice): DeviceConnectivity 
 
 export function formatDeviceTable(entries: DeviceConnectivity[]): string {
   const header = ['HOSTNAME', 'TAILSCALE IP', 'OS', 'ONLINE', 'AUTHORIZED', 'LAST SEEN'];
-  const rows = entries.map((e) => [
+  const plainRows = entries.map((e) => [
     e.device.hostname,
     e.tailscaleIp ?? 'n/a',
     e.device.os,
@@ -32,12 +33,22 @@ export function formatDeviceTable(entries: DeviceConnectivity[]): string {
     e.authorized ? 'yes' : 'no',
     formatLastSeen(e.lastSeen),
   ]);
+  const coloredRows = entries.map((e) => [
+    e.device.hostname,
+    e.tailscaleIp ?? 'n/a',
+    e.device.os,
+    e.online ? chalk.green('yes') : chalk.red('no'),
+    e.authorized ? chalk.green('yes') : chalk.yellow('no'),
+    formatLastSeen(e.lastSeen),
+  ]);
 
-  const allRows = [header, ...rows];
-  const widths = header.map((_, i) => Math.max(...allRows.map((r) => r[i].length)));
-  const fmt = (row: string[]) => row.map((c, i) => c.padEnd(widths[i])).join('  ');
+  const allPlain = [header, ...plainRows];
+  const widths = header.map((_, i) => Math.max(...allPlain.map((r) => r[i].length)));
+  const fmtPlain = (row: string[]) => row.map((c, i) => c.padEnd(widths[i])).join('  ');
+  const fmtColored = (row: string[], plain: string[]) =>
+    row.map((c, i) => c + ' '.repeat(Math.max(0, widths[i] - plain[i].length))).join('  ');
   const sep = widths.map((w) => '-'.repeat(w)).join('  ');
-  return [fmt(header), sep, ...rows.map(fmt)].join('\n');
+  return [fmtPlain(header), sep, ...coloredRows.map((r, i) => fmtColored(r, plainRows[i]))].join('\n');
 }
 
 function formatLastSeen(iso: string): string {
