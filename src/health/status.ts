@@ -13,7 +13,10 @@ export interface AgentStatusResult {
 export async function getAgentStatus(agent: Agent): Promise<AgentStatusResult> {
   const ssh = new SshClient(agent.sshKeyPath);
   try {
-    const result = await ssh.execOnAgent(agent, 'source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json');
+    const result = await ssh.execOnAgent(
+      agent,
+      'source ~/.nvm/nvm.sh 2>/dev/null; openclaw status --json',
+    );
 
     if (result.code !== 0) {
       return {
@@ -109,9 +112,12 @@ export function formatLogLine(raw: string): string {
   try {
     const obj = JSON.parse(raw) as Record<string, unknown>;
     const time = obj.time ? new Date(obj.time as string | number).toISOString() : '???';
-    const level = typeof obj.level === 'string' ? obj.level.toUpperCase()
-      : typeof obj.level === 'number' ? levelNumberToName(obj.level)
-      : 'INFO';
+    const level =
+      typeof obj.level === 'string'
+        ? obj.level.toUpperCase()
+        : typeof obj.level === 'number'
+          ? levelNumberToName(obj.level)
+          : 'INFO';
     // OpenClaw logs store the human-readable message in field '1' or 'msg'
     const message = obj['1'] ?? obj.msg ?? obj.message ?? '';
     return `[${time}] [${level}] ${message}`;
@@ -145,14 +151,7 @@ export function formatStatusTable(results: AgentStatusResult[]): string {
         ? chalk.yellow(r.error)
         : chalk.green('ok')
       : chalk.red(r.error ?? 'unreachable');
-    return [
-      r.agent.name,
-      r.agent.role,
-      r.agent.host,
-      r.agent.tailscaleIp,
-      reachableStr,
-      statusStr,
-    ];
+    return [r.agent.name, r.agent.role, r.agent.host, r.agent.tailscaleIp, reachableStr, statusStr];
   });
   // Plain versions for column width calculation (chalk adds invisible ANSI codes)
   const plainRows = results.map((r) => [
@@ -165,15 +164,15 @@ export function formatStatusTable(results: AgentStatusResult[]): string {
   ]);
 
   const allPlainRows = [header, ...plainRows];
-  const colWidths = header.map((_, i) =>
-    Math.max(...allPlainRows.map((row) => row[i].length)),
-  );
+  const colWidths = header.map((_, i) => Math.max(...allPlainRows.map((row) => row[i].length)));
 
   const formatRow = (row: string[], plainRow: string[]) =>
-    row.map((cell, i) => {
-      const pad = colWidths[i] - plainRow[i].length;
-      return cell + ' '.repeat(Math.max(0, pad));
-    }).join('  ');
+    row
+      .map((cell, i) => {
+        const pad = colWidths[i] - plainRow[i].length;
+        return cell + ' '.repeat(Math.max(0, pad));
+      })
+      .join('  ');
 
   const formatPlainRow = (row: string[]) =>
     row.map((cell, i) => cell.padEnd(colWidths[i])).join('  ');

@@ -19,20 +19,28 @@ export async function loadAlertConfig(): Promise<AlertConfig> {
 
 function severityEmoji(s: string): string {
   switch (s) {
-    case 'critical': return '🔴';
-    case 'warning': return '🟡';
-    default: return 'ℹ️';
+    case 'critical':
+      return '🔴';
+    case 'warning':
+      return '🟡';
+    default:
+      return 'ℹ️';
   }
 }
 
-async function sendTelegram(alert: Alert, config: { botToken: string; chatId: string }): Promise<void> {
+async function sendTelegram(
+  alert: Alert,
+  config: { botToken: string; chatId: string },
+): Promise<void> {
   const text = [
     `${severityEmoji(alert.severity)} *${escapeMarkdown(alert.title)}*`,
     '',
     escapeMarkdown(alert.message),
     alert.agentName ? `Agent: ${escapeMarkdown(alert.agentName)}` : '',
     `_${escapeMarkdown(alert.timestamp)}_`,
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const url = `https://api.telegram.org/bot${config.botToken}/sendMessage`;
   await fetch(url, {
@@ -47,7 +55,7 @@ async function sendTelegram(alert: Alert, config: { botToken: string; chatId: st
 }
 
 function escapeMarkdown(text: string): string {
-  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+  return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
 }
 
 export async function sendAlert(alert: Alert): Promise<void> {
@@ -58,7 +66,9 @@ export async function sendAlert(alert: Alert): Promise<void> {
     try {
       await sendTelegram(alert, config.channels.telegram);
     } catch (err) {
-      console.error(`Failed to send Telegram alert: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `Failed to send Telegram alert: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

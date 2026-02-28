@@ -1,6 +1,5 @@
 import { Command } from 'commander';
-import { writeFile, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import chalk from 'chalk';
@@ -69,7 +68,11 @@ export function createAlertsCommand(): Command {
     .action(async (opts: { severity: string }) => {
       const s = opts.severity as 'info' | 'warning' | 'critical';
       console.log('Sending test alert...');
-      await alert(s, 'clawctl Test Alert', `This is a test ${s} alert from clawctl. If you see this, alerting is working!`);
+      await alert(
+        s,
+        'clawctl Test Alert',
+        `This is a test ${s} alert from clawctl. If you see this, alerting is working!`,
+      );
       console.log(chalk.green('Done. Check your configured channels.'));
     });
 

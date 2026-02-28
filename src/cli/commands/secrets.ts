@@ -6,7 +6,6 @@ import { SecretVault } from '../../secrets/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
 import { SshClient } from '../../ssh/index.js';
-import { audit } from '../../audit/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
@@ -153,11 +152,14 @@ export function createSecretsCommand(): Command {
           return;
         }
 
-  // Policy check
-      const policyResult = await enforcePolicy('secrets.push', agent);
-      if (!policyResult.allowed) { process.exitCode = 1; return; }
+        // Policy check
+        const policyResult = await enforcePolicy('secrets.push', agent);
+        if (!policyResult.allowed) {
+          process.exitCode = 1;
+          return;
+        }
 
-            const ssh = new SshClient(agent.sshKeyPath);
+        const ssh = new SshClient(agent.sshKeyPath);
         try {
           await ssh.connect(agent);
 
@@ -193,9 +195,10 @@ export function createSecretsCommand(): Command {
             envContent = lines.join('\n');
           } else {
             // Build .env from secrets only
-            envContent = Object.entries(entries)
-              .map(([k, v]) => `${k}=${v}`)
-              .join('\n') + '\n';
+            envContent =
+              Object.entries(entries)
+                .map(([k, v]) => `${k}=${v}`)
+                .join('\n') + '\n';
           }
 
           await ssh.exec(`mkdir -p ${REMOTE_OPENCLAW_DIR}`);

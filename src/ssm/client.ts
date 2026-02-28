@@ -1,8 +1,4 @@
-import {
-  SSMClient,
-  SendCommandCommand,
-  GetCommandInvocationCommand,
-} from '@aws-sdk/client-ssm';
+import { SSMClient, SendCommandCommand, GetCommandInvocationCommand } from '@aws-sdk/client-ssm';
 
 export interface SsmExecResult {
   status: string;
@@ -48,8 +44,8 @@ export class SsmManager {
           stdout: inv.StandardOutputContent ?? '',
           stderr: inv.StandardErrorContent ?? '',
         };
-      } catch (err: any) {
-        if (err.name === 'InvocationDoesNotExist') continue;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'InvocationDoesNotExist') continue;
         throw err;
       }
     }

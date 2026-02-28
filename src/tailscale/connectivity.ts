@@ -48,7 +48,9 @@ export function formatDeviceTable(entries: DeviceConnectivity[]): string {
   const fmtColored = (row: string[], plain: string[]) =>
     row.map((c, i) => c + ' '.repeat(Math.max(0, widths[i] - plain[i].length))).join('  ');
   const sep = widths.map((w) => '-'.repeat(w)).join('  ');
-  return [fmtPlain(header), sep, ...coloredRows.map((r, i) => fmtColored(r, plainRows[i]))].join('\n');
+  return [fmtPlain(header), sep, ...coloredRows.map((r, i) => fmtColored(r, plainRows[i]))].join(
+    '\n',
+  );
 }
 
 function formatLastSeen(iso: string): string {

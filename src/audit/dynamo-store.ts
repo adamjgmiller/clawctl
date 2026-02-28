@@ -10,8 +10,8 @@ import type { AuditEntry, AuditQuery } from './types.js';
 import type { AuditStore } from './store.js';
 
 const TABLE_NAME = 'clawctl-audit';
-const PK = 'pk';     // partition key: "AUDIT"
-const SK = 'sk';     // sort key: "<timestamp>#<id>"
+const PK = 'pk'; // partition key: "AUDIT"
+const SK = 'sk'; // sort key: "<timestamp>#<id>"
 
 export class DynamoAuditStore implements AuditStore {
   constructor(private client: DynamoDBClient) {}

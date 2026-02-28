@@ -3,7 +3,12 @@ export type { DeployCallbacks } from './fresh.js';
 export { adoptDeploy } from './adopt.js';
 export { provisionEc2Instance } from './ec2.js';
 export type { Ec2ProvisionInput, Ec2ProvisionResult } from './ec2.js';
-export { loadDeployTemplates, getTemplatesDir, ensureTemplatesDir, seedDefaultTemplates } from './templates.js';
+export {
+  loadDeployTemplates,
+  getTemplatesDir,
+  ensureTemplatesDir,
+  seedDefaultTemplates,
+} from './templates.js';
 export type { DeployTemplates } from './templates.js';
 export {
   DEFAULT_OPENCLAW_JSON,

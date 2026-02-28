@@ -7,7 +7,6 @@ import { getClawctlDir, ensureClawctlDir } from '../config/index.js';
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
-const TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 const SECRETS_FILE = 'secrets.json';
 
@@ -53,11 +52,7 @@ function encrypt(plaintext: string, key: Buffer): EncryptedPayload {
 }
 
 function decrypt(payload: EncryptedPayload, key: Buffer): string {
-  const decipher = createDecipheriv(
-    ALGORITHM,
-    key,
-    Buffer.from(payload.iv, 'hex'),
-  );
+  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(payload.iv, 'hex'));
   decipher.setAuthTag(Buffer.from(payload.tag, 'hex'));
   const decrypted = Buffer.concat([
     decipher.update(Buffer.from(payload.data, 'hex')),

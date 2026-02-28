@@ -32,7 +32,9 @@ export function createPolicyCommand(): Command {
       for (const rule of pol.rules) {
         const effectColor = rule.effect === 'allow' ? chalk.green : chalk.red;
         const confirm = rule.requireConfirmation ? chalk.yellow(' [confirm required]') : '';
-        console.log(`  ${chalk.bold(rule.id)}: ${effectColor(rule.effect)}${confirm} on ${chalk.cyan(rule.action)}`);
+        console.log(
+          `  ${chalk.bold(rule.id)}: ${effectColor(rule.effect)}${confirm} on ${chalk.cyan(rule.action)}`,
+        );
         if (rule.description) console.log(`    ${chalk.dim(rule.description)}`);
         if (rule.conditions?.length) {
           for (const c of rule.conditions) {
@@ -96,49 +98,51 @@ export function createPolicyCommand(): Command {
     .option('--description <desc>', 'Rule description')
     .option('--condition <cond...>', 'Conditions as field:op:value (e.g. role:eq:worker)')
     .option('--require-confirmation', 'Require human confirmation')
-    .action(async (opts: {
-      id: string;
-      action: string;
-      effect: string;
-      description?: string;
-      condition?: string[];
-      requireConfirmation?: boolean;
-    }) => {
-      if (opts.effect !== 'allow' && opts.effect !== 'deny') {
-        console.error('Effect must be "allow" or "deny".');
-        process.exitCode = 1;
-        return;
-      }
-
-      const conditions: PolicyCondition[] = (opts.condition ?? []).map((c) => {
-        const parts = c.split(':');
-        if (parts.length < 3) {
-          throw new Error(`Invalid condition format: ${c}. Expected field:op:value`);
+    .action(
+      async (opts: {
+        id: string;
+        action: string;
+        effect: string;
+        description?: string;
+        condition?: string[];
+        requireConfirmation?: boolean;
+      }) => {
+        if (opts.effect !== 'allow' && opts.effect !== 'deny') {
+          console.error('Effect must be "allow" or "deny".');
+          process.exitCode = 1;
+          return;
         }
-        const [field, op, ...rest] = parts;
-        const value = rest.join(':');
-        return {
-          field,
-          op: op as PolicyCondition['op'],
-          value: value.includes(',') ? value.split(',') : value,
+
+        const conditions: PolicyCondition[] = (opts.condition ?? []).map((c) => {
+          const parts = c.split(':');
+          if (parts.length < 3) {
+            throw new Error(`Invalid condition format: ${c}. Expected field:op:value`);
+          }
+          const [field, op, ...rest] = parts;
+          const value = rest.join(':');
+          return {
+            field,
+            op: op as PolicyCondition['op'],
+            value: value.includes(',') ? value.split(',') : value,
+          };
+        });
+
+        const rule: PolicyRule = {
+          id: opts.id,
+          description: opts.description,
+          action: opts.action,
+          effect: opts.effect as PolicyEffect,
+          conditions: conditions.length > 0 ? conditions : undefined,
+          requireConfirmation: opts.requireConfirmation,
         };
-      });
 
-      const rule: PolicyRule = {
-        id: opts.id,
-        description: opts.description,
-        action: opts.action,
-        effect: opts.effect as PolicyEffect,
-        conditions: conditions.length > 0 ? conditions : undefined,
-        requireConfirmation: opts.requireConfirmation,
-      };
-
-      const engine = await PolicyEngine.load();
-      engine.addRule(rule);
-      await engine.save();
-      console.log(`Rule "${opts.id}" added.`);
-      await audit('policy.add', { detail: { ruleId: opts.id, rule } as Record<string, unknown> });
-    });
+        const engine = await PolicyEngine.load();
+        engine.addRule(rule);
+        await engine.save();
+        console.log(`Rule "${opts.id}" added.`);
+        await audit('policy.add', { detail: { ruleId: opts.id, rule } as Record<string, unknown> });
+      },
+    );
 
   policy
     .command('remove')

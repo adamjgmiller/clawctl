@@ -23,7 +23,7 @@ export async function enforcePolicy(
     if (decision.matchedRule) {
       console.error(chalk.dim(`  Rule: ${decision.matchedRule.id}`));
     }
-    await audit('policy.check' as any, {
+    await audit('policy.check', {
       agentId: agent?.id,
       agentName: agent?.name,
       detail: { action, allowed: false, rule: decision.matchedRule?.id },

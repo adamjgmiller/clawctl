@@ -54,7 +54,8 @@ export async function diagnoseAgent(agent: Agent): Promise<DiagnosticReport> {
     const systemd = await ssh.exec('systemctl --user status openclaw-gateway 2>&1');
     const systemdOutput = systemd.stdout || systemd.stderr;
     const isActive = systemdOutput.includes('Active: active (running)');
-    const isFailed = systemdOutput.includes('Active: failed') || systemdOutput.includes('Active: inactive');
+    const isFailed =
+      systemdOutput.includes('Active: failed') || systemdOutput.includes('Active: inactive');
 
     if (isActive) {
       report.gatewayRunning = true;
@@ -90,7 +91,9 @@ export async function diagnoseAgent(agent: Agent): Promise<DiagnosticReport> {
         status: 'warning',
         message: 'No log files found in /tmp/openclaw/',
       });
-      report.recommendations.push('Check if OpenClaw is configured to write logs to /tmp/openclaw/');
+      report.recommendations.push(
+        'Check if OpenClaw is configured to write logs to /tmp/openclaw/',
+      );
     } else {
       const lines = logOutput.split('\n');
       const errorLines = lines.filter((l) => /error|fatal|panic/i.test(l));
@@ -132,7 +135,9 @@ export async function diagnoseAgent(agent: Agent): Promise<DiagnosticReport> {
           status: 'error',
           message: `Disk usage critical: ${usagePct}% used, ${available} available`,
         });
-        report.recommendations.push('Free disk space immediately — agent may fail to write logs or configs');
+        report.recommendations.push(
+          'Free disk space immediately — agent may fail to write logs or configs',
+        );
       } else if (usagePct >= 85) {
         report.findings.push({
           check: 'disk',
@@ -150,7 +155,7 @@ export async function diagnoseAgent(agent: Agent): Promise<DiagnosticReport> {
     }
 
     // 4. Memory
-    const mem = await ssh.exec("free -m | awk '/^Mem:/ {printf \"%d %d %d\", $2, $3, $7}'");
+    const mem = await ssh.exec('free -m | awk \'/^Mem:/ {printf "%d %d %d", $2, $3, $7}\'');
     const memParts = mem.stdout.trim().split(/\s+/);
     if (memParts.length >= 3) {
       const totalMb = parseInt(memParts[0], 10);
@@ -164,7 +169,9 @@ export async function diagnoseAgent(agent: Agent): Promise<DiagnosticReport> {
           status: 'error',
           message: `Memory critical: ${availableMb}MB available of ${totalMb}MB (${usagePct}% used)`,
         });
-        report.recommendations.push('Agent may OOM — consider upgrading instance or reducing workload');
+        report.recommendations.push(
+          'Agent may OOM — consider upgrading instance or reducing workload',
+        );
       } else if (usagePct >= 85) {
         report.findings.push({
           check: 'memory',
@@ -210,9 +217,11 @@ export function formatDiagnosticReport(report: DiagnosticReport): string {
   lines.push(chalk.bold('Checks:'));
   for (const f of report.findings) {
     const icon =
-      f.status === 'ok' ? chalk.green('PASS')
-      : f.status === 'warning' ? chalk.yellow('WARN')
-      : chalk.red('FAIL');
+      f.status === 'ok'
+        ? chalk.green('PASS')
+        : f.status === 'warning'
+          ? chalk.yellow('WARN')
+          : chalk.red('FAIL');
     lines.push(`  [${icon}] ${chalk.bold(f.check)}: ${f.message}`);
     if (f.detail) {
       for (const d of f.detail.split('\n')) {

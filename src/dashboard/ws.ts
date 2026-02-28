@@ -31,7 +31,9 @@ export function attachWebSocket(server: HttpServer): void {
         } else if (msg.type === 'ping') {
           ws.send(JSON.stringify({ type: 'pong' }));
         }
-      } catch {}
+      } catch {
+        // ignore malformed messages
+      }
     });
 
     ws.on('close', () => {
@@ -67,8 +69,10 @@ async function sendInitState(ws: WebSocket): Promise<void> {
     const audit = await auditStore.query({ limit: 30 });
 
     // Update hashes to prevent duplicate broadcast on first poll
-    lastAgentHash = JSON.stringify(agents.map(a => ({ id: a.id, status: a.status, updatedAt: a.updatedAt })));
-    lastAuditHash = JSON.stringify(audit.map((a: any) => a.timestamp));
+    lastAgentHash = JSON.stringify(
+      agents.map((a) => ({ id: a.id, status: a.status, updatedAt: a.updatedAt })),
+    );
+    lastAuditHash = JSON.stringify(audit.map((a: { timestamp?: string }) => a.timestamp));
 
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'init', data: { agents, audit }, ts: Date.now() }));
@@ -83,7 +87,9 @@ async function poll(): Promise<void> {
   try {
     const store = new JsonAgentStore();
     const agents = await store.list();
-    const agentHash = JSON.stringify(agents.map(a => ({ id: a.id, status: a.status, updatedAt: a.updatedAt })));
+    const agentHash = JSON.stringify(
+      agents.map((a) => ({ id: a.id, status: a.status, updatedAt: a.updatedAt })),
+    );
 
     if (agentHash !== lastAgentHash) {
       lastAgentHash = agentHash;
@@ -92,7 +98,7 @@ async function poll(): Promise<void> {
 
     const auditStore = new JsonAuditStore();
     const audit = await auditStore.query({ limit: 10 });
-    const auditHash = JSON.stringify(audit.map((a: any) => a.timestamp));
+    const auditHash = JSON.stringify(audit.map((a: { timestamp?: string }) => a.timestamp));
     if (auditHash !== lastAuditHash) {
       lastAuditHash = auditHash;
       broadcast('audit', { audit });

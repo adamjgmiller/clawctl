@@ -8,7 +8,12 @@ import {
 } from '../../types/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
-import { getAgentStatus, formatStatusTable, formatVerboseStatus, formatLogOutput, diagnoseAgent, restartGateway, formatDiagnosticReport } from '../../health/index.js';
+import {
+  getAgentStatus,
+  formatStatusTable,
+  formatVerboseStatus,
+  formatLogOutput,
+} from '../../health/index.js';
 import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
@@ -21,7 +26,7 @@ function createStore(): AgentStore {
 
 function formatZodError(err: unknown): string[] {
   if (err instanceof Error && 'issues' in err) {
-    const issues = (err as any).issues as Array<{ path: string[]; message: string }>;
+    const issues = (err as { issues: Array<{ path: string[]; message: string }> }).issues;
     return issues.map((issue) => `Error: ${issue.path.join('.')}: ${issue.message}`);
   }
   return [`Error: ${err instanceof Error ? err.message : String(err)}`];
@@ -52,10 +57,13 @@ export function createAgentsCommand(): Command {
       const plainRows = list.map((a) => [a.id, a.name, a.host, a.role, a.status]);
       const coloredRows = list.map((a) => {
         const statusColor =
-          a.status === 'online' ? chalk.green
-          : a.status === 'offline' ? chalk.red
-          : a.status === 'degraded' ? chalk.yellow
-          : chalk.dim;
+          a.status === 'online'
+            ? chalk.green
+            : a.status === 'offline'
+              ? chalk.red
+              : a.status === 'degraded'
+                ? chalk.yellow
+                : chalk.dim;
         return [a.id, a.name, a.host, a.role, statusColor(a.status)];
       });
       const allPlain = [header, ...plainRows];
@@ -64,11 +72,11 @@ export function createAgentsCommand(): Command {
       const fmtColored = (row: string[], plain: string[]) =>
         row.map((c, i) => c + ' '.repeat(Math.max(0, widths[i] - plain[i].length))).join('  ');
       const sep = widths.map((w) => '-'.repeat(w)).join('  ');
-      console.log([
-        fmtPlain(header),
-        sep,
-        ...coloredRows.map((r, i) => fmtColored(r, plainRows[i])),
-      ].join('\n'));
+      console.log(
+        [fmtPlain(header), sep, ...coloredRows.map((r, i) => fmtColored(r, plainRows[i]))].join(
+          '\n',
+        ),
+      );
     });
 
   agents
@@ -141,8 +149,7 @@ export function createAgentsCommand(): Command {
       }
 
       const labelWidth = 16;
-      const fmt = (label: string, value: string) =>
-        `${(label + ':').padEnd(labelWidth)} ${value}`;
+      const fmt = (label: string, value: string) => `${(label + ':').padEnd(labelWidth)} ${value}`;
 
       const lines = [
         fmt('ID', agent.id),
@@ -183,7 +190,7 @@ export function createAgentsCommand(): Command {
 
   agents
     .command('update')
-    .description('Update an agent\'s fields')
+    .description("Update an agent's fields")
     .argument('<id>', 'Agent ID')
     .option('--name <name>', 'New agent name')
     .option('--host <host>', 'New hostname')
@@ -237,7 +244,11 @@ export function createAgentsCommand(): Command {
         const updated = await store.update(id, input);
         if (updated) {
           console.log(`Agent ${updated.name} (${updated.id}) updated.`);
-          await audit('agent.update', { agentId: updated.id, agentName: updated.name, detail: raw });
+          await audit('agent.update', {
+            agentId: updated.id,
+            agentName: updated.name,
+            detail: raw,
+          });
         }
       },
     );
@@ -249,91 +260,114 @@ export function createAgentsCommand(): Command {
     .option('--json', 'Output as JSON')
     .option('--ssh-key <path>', 'SSH private key path (overrides agent/config default)')
     .option('--verbose', 'Show detailed openclaw status (version, uptime, model, channels)')
-    .action(async (id: string | undefined, opts: { json?: boolean; sshKey?: string; verbose?: boolean }) => {
-      const store = createStore();
-      let agentsList;
+    .action(
+      async (
+        id: string | undefined,
+        opts: { json?: boolean; sshKey?: string; verbose?: boolean },
+      ) => {
+        const store = createStore();
+        let agentsList;
 
-      if (id) {
-        const agent = await store.get(id);
-        if (!agent) {
-          console.error(`Agent ${id} not found.`);
-          process.exitCode = 1;
-          return;
-        }
-        agentsList = [agent];
-      } else {
-        agentsList = await store.list();
-        if (agentsList.length === 0) {
-          console.log('No agents registered.');
-          return;
-        }
-      }
-
-      // If --ssh-key is passed, override per-agent sshKeyPath for this check
-      if (opts.sshKey) {
-        agentsList = agentsList.map((a) => ({ ...a, sshKeyPath: opts.sshKey }));
-      }
-
-      const results = await Promise.allSettled(agentsList.map((a) => getAgentStatus(a)));
-      const statuses = results.map((r, i) =>
-        r.status === 'fulfilled'
-          ? r.value
-          : { agent: agentsList[i], reachable: false as const, error: String(r.reason) },
-      );
-
-      // Persist status back to the registry
-      for (const s of statuses) {
-        let newStatus: 'online' | 'offline' | 'degraded';
-        if (!s.reachable) {
-          newStatus = 'offline';
-        } else if (s.error) {
-          newStatus = 'degraded';
+        if (id) {
+          const agent = await store.get(id);
+          if (!agent) {
+            console.error(`Agent ${id} not found.`);
+            process.exitCode = 1;
+            return;
+          }
+          agentsList = [agent];
         } else {
-          newStatus = 'online';
-        }
-        const prevStatus = s.agent.status;
-        await store.update(s.agent.id, { status: newStatus });
-        // Alert on status change to offline or degraded
-        if (newStatus !== prevStatus) {
-          if (newStatus === 'offline') {
-            await alert('critical', `Agent offline: ${s.agent.name}`, `Agent ${s.agent.name} (${s.agent.tailscaleIp}) is unreachable.`, s.agent.id, s.agent.name);
-          } else if (newStatus === 'degraded') {
-            await alert('warning', `Agent degraded: ${s.agent.name}`, `Agent ${s.agent.name} has errors: ${s.error ?? 'unknown'}`, s.agent.id, s.agent.name);
-          } else if (newStatus === 'online' && prevStatus !== 'unknown') {
-            await alert('info', `Agent recovered: ${s.agent.name}`, `Agent ${s.agent.name} is back online.`, s.agent.id, s.agent.name);
+          agentsList = await store.list();
+          if (agentsList.length === 0) {
+            console.log('No agents registered.');
+            return;
           }
         }
-        await audit('agent.status', {
-          agentId: s.agent.id,
-          agentName: s.agent.name,
-          success: s.reachable,
-          error: s.error,
-        });
-      }
 
-      if (opts.json) {
-        console.log(JSON.stringify(statuses, null, 2));
-      } else if (opts.verbose) {
-        for (const s of statuses) {
-          console.log(chalk.bold(`--- ${s.agent.name} (${s.agent.role}) ---`));
-          console.log(`  Host:         ${s.agent.host}`);
-          console.log(`  Tailscale IP: ${s.agent.tailscaleIp}`);
-          console.log(`  Reachable:    ${s.reachable ? chalk.green('yes') : chalk.red('no')}`);
-          if (s.openclawStatus) {
-            for (const line of formatVerboseStatus(s.openclawStatus)) {
-              console.log(line);
-            }
-          } else if (s.raw) {
-            console.log(`  Output:       ${s.raw}`);
-          } else if (s.error) {
-            console.log(`  Error:        ${chalk.red(s.error)}`);
-          }
-          console.log('');
+        // If --ssh-key is passed, override per-agent sshKeyPath for this check
+        if (opts.sshKey) {
+          agentsList = agentsList.map((a) => ({ ...a, sshKeyPath: opts.sshKey }));
         }
-      } else {
-        console.log(formatStatusTable(statuses));
-      }
-    });
+
+        const results = await Promise.allSettled(agentsList.map((a) => getAgentStatus(a)));
+        const statuses = results.map((r, i) =>
+          r.status === 'fulfilled'
+            ? r.value
+            : { agent: agentsList[i], reachable: false as const, error: String(r.reason) },
+        );
+
+        // Persist status back to the registry
+        for (const s of statuses) {
+          let newStatus: 'online' | 'offline' | 'degraded';
+          if (!s.reachable) {
+            newStatus = 'offline';
+          } else if (s.error) {
+            newStatus = 'degraded';
+          } else {
+            newStatus = 'online';
+          }
+          const prevStatus = s.agent.status;
+          await store.update(s.agent.id, { status: newStatus });
+          // Alert on status change to offline or degraded
+          if (newStatus !== prevStatus) {
+            if (newStatus === 'offline') {
+              await alert(
+                'critical',
+                `Agent offline: ${s.agent.name}`,
+                `Agent ${s.agent.name} (${s.agent.tailscaleIp}) is unreachable.`,
+                s.agent.id,
+                s.agent.name,
+              );
+            } else if (newStatus === 'degraded') {
+              await alert(
+                'warning',
+                `Agent degraded: ${s.agent.name}`,
+                `Agent ${s.agent.name} has errors: ${s.error ?? 'unknown'}`,
+                s.agent.id,
+                s.agent.name,
+              );
+            } else if (newStatus === 'online' && prevStatus !== 'unknown') {
+              await alert(
+                'info',
+                `Agent recovered: ${s.agent.name}`,
+                `Agent ${s.agent.name} is back online.`,
+                s.agent.id,
+                s.agent.name,
+              );
+            }
+          }
+          await audit('agent.status', {
+            agentId: s.agent.id,
+            agentName: s.agent.name,
+            success: s.reachable,
+            error: s.error,
+          });
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(statuses, null, 2));
+        } else if (opts.verbose) {
+          for (const s of statuses) {
+            console.log(chalk.bold(`--- ${s.agent.name} (${s.agent.role}) ---`));
+            console.log(`  Host:         ${s.agent.host}`);
+            console.log(`  Tailscale IP: ${s.agent.tailscaleIp}`);
+            console.log(`  Reachable:    ${s.reachable ? chalk.green('yes') : chalk.red('no')}`);
+            if (s.openclawStatus) {
+              for (const line of formatVerboseStatus(s.openclawStatus)) {
+                console.log(line);
+              }
+            } else if (s.raw) {
+              console.log(`  Output:       ${s.raw}`);
+            } else if (s.error) {
+              console.log(`  Error:        ${chalk.red(s.error)}`);
+            }
+            console.log('');
+          }
+        } else {
+          console.log(formatStatusTable(statuses));
+        }
+      },
+    );
 
   agents
     .command('logs')
@@ -360,7 +394,9 @@ export function createAgentsCommand(): Command {
         await ssh.connect(agent);
         if (opts.follow) {
           // For --follow, stream output directly to stdout
-          console.log(chalk.dim(`Tailing logs on ${agent.name} (${agent.tailscaleIp})... Ctrl+C to stop\n`));
+          console.log(
+            chalk.dim(`Tailing logs on ${agent.name} (${agent.tailscaleIp})... Ctrl+C to stop\n`),
+          );
           const result = await ssh.exec(cmd);
           process.stdout.write(formatLogOutput(result.stdout));
           if (result.stderr) process.stderr.write(result.stderr);
@@ -371,14 +407,14 @@ export function createAgentsCommand(): Command {
           if (result.code !== 0) process.exitCode = 1;
         }
       } catch (err) {
-        console.error(`Failed to connect to ${agent.name}: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(
+          `Failed to connect to ${agent.name}: ${err instanceof Error ? err.message : String(err)}`,
+        );
         process.exitCode = 1;
       } finally {
         ssh.disconnect();
       }
     });
-
-
 
   agents
     .command('diagnose')
@@ -396,7 +432,13 @@ export function createAgentsCommand(): Command {
       }
 
       const ssh = new SshClient(agent.sshKeyPath);
-      const checks: Array<{ name: string; cmd: string; stdout: string; stderr: string; code: number | null }> = [];
+      const checks: Array<{
+        name: string;
+        cmd: string;
+        stdout: string;
+        stderr: string;
+        code: number | null;
+      }> = [];
 
       const pushCheck = async (name: string, cmd: string) => {
         const res = await ssh.exec(cmd);
@@ -405,7 +447,7 @@ export function createAgentsCommand(): Command {
       };
 
       const recommended: string[] = [];
-      let fixAttempted: string[] = [];
+      const fixAttempted: string[] = [];
 
       try {
         await ssh.connect(agent);
@@ -430,7 +472,10 @@ export function createAgentsCommand(): Command {
 
         // Basic host health
         await pushCheck('host.df', 'df -h / 2>&1');
-        await pushCheck('host.free', 'free -h 2>&1 || vm_stat 2>&1 || echo "free/vm_stat unavailable"');
+        await pushCheck(
+          'host.free',
+          'free -h 2>&1 || vm_stat 2>&1 || echo "free/vm_stat unavailable"',
+        );
         await pushCheck('host.uptime', 'uptime 2>&1');
 
         // Recent gateway logs
@@ -457,16 +502,22 @@ export function createAgentsCommand(): Command {
               'systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo unknown',
             );
             if ((restartRes.code ?? 0) != 0) {
-              recommended.push('Restart attempt returned non-zero. Check systemd status output above.');
+              recommended.push(
+                'Restart attempt returned non-zero. Check systemd status output above.',
+              );
             }
           } else {
             recommended.push('Re-run with --fix to attempt a restart if appropriate.');
           }
         } else {
-          recommended.push('Gateway service appears active. If messages are still failing, inspect recent logs and OpenClaw status output.');
+          recommended.push(
+            'Gateway service appears active. If messages are still failing, inspect recent logs and OpenClaw status output.',
+          );
         }
       } catch (err) {
-        recommended.push(`SSH/diagnose failed: ${err instanceof Error ? err.message : String(err)}`);
+        recommended.push(
+          `SSH/diagnose failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
         process.exitCode = 1;
       } finally {
         ssh.disconnect();
@@ -517,7 +568,6 @@ export function createAgentsCommand(): Command {
       }
     });
 
-
   agents
     .command('exec')
     .description('Run a command on an agent via SSH (or SSM with --ssm)')
@@ -538,7 +588,9 @@ export function createAgentsCommand(): Command {
 
       if (opts.ssm) {
         if (!agent.awsInstanceId) {
-          console.error(`Agent ${agent.name} has no AWS instance ID. Use --ssm only for EC2 agents.`);
+          console.error(
+            `Agent ${agent.name} has no AWS instance ID. Use --ssm only for EC2 agents.`,
+          );
           process.exitCode = 1;
           return;
         }
@@ -554,7 +606,11 @@ export function createAgentsCommand(): Command {
           console.error(`SSM error: ${err instanceof Error ? err.message : String(err)}`);
           process.exitCode = 1;
         }
-        await audit('agent.exec' as any, { agentId: agent.id, agentName: agent.name, detail: { method: 'ssm', cmd } });
+        await audit('agent.exec', {
+          agentId: agent.id,
+          agentName: agent.name,
+          detail: { method: 'ssm', cmd },
+        });
       } else {
         const ssh = new SshClient(opts.sshKey ?? agent.sshKeyPath);
         try {
@@ -569,7 +625,11 @@ export function createAgentsCommand(): Command {
         } finally {
           ssh.disconnect();
         }
-        await audit('agent.exec' as any, { agentId: agent.id, agentName: agent.name, detail: { method: 'ssh', cmd } });
+        await audit('agent.exec', {
+          agentId: agent.id,
+          agentName: agent.name,
+          detail: { method: 'ssh', cmd },
+        });
       }
     });
 
@@ -611,8 +671,7 @@ export function createAgentsCommand(): Command {
         env?: string;
       }) => {
         const cfg = await loadConfig();
-        const tailscaleAuthKey =
-          opts.tailscaleAuthKey ?? process.env.TAILSCALE_AUTH_KEY;
+        const tailscaleAuthKey = opts.tailscaleAuthKey ?? process.env.TAILSCALE_AUTH_KEY;
 
         if (!tailscaleAuthKey) {
           console.error(
@@ -669,9 +728,14 @@ export function createAgentsCommand(): Command {
         }
 
         const store = createStore();
-        await freshDeploy(input, store, {
-          onStep: (msg) => console.log(`  → ${msg}`),
-        });
+        try {
+          await freshDeploy(input, store, {
+            onStep: (msg) => console.log(`  → ${msg}`),
+          });
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
       },
     );
 
@@ -716,9 +780,14 @@ export function createAgentsCommand(): Command {
         }
 
         const store = createStore();
-        await adoptDeploy(input, store, {
-          onStep: (msg) => console.log(`  → ${msg}`),
-        });
+        try {
+          await adoptDeploy(input, store, {
+            onStep: (msg) => console.log(`  → ${msg}`),
+          });
+        } catch (err) {
+          console.error(err instanceof Error ? err.message : String(err));
+          process.exitCode = 1;
+        }
       },
     );
 

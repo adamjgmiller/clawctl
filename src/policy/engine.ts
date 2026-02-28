@@ -2,12 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type {
-  PolicyFile,
-  PolicyRule,
-  PolicyCondition,
-  PolicyDecision,
-} from './types.js';
+import type { PolicyFile, PolicyRule, PolicyCondition, PolicyDecision } from './types.js';
 import type { Agent } from '../types/index.js';
 
 const DEFAULT_POLICY_PATH = join(homedir(), '.clawctl', 'policy.json');

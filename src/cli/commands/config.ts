@@ -36,7 +36,10 @@ export function createConfigCommand(): Command {
 
       // Policy check
       const policy = await enforcePolicy('config.push', agent);
-      if (!policy.allowed) { process.exitCode = 1; return; }
+      if (!policy.allowed) {
+        process.exitCode = 1;
+        return;
+      }
 
       let templates;
       try {
@@ -264,11 +267,7 @@ function unifiedDiff(localContent: string, remoteContent: string, filename: stri
   return lines.join('\n');
 }
 
-async function diffAgent(
-  agent: Agent,
-  localConfig: string,
-  localEnv: string,
-): Promise<boolean> {
+async function diffAgent(agent: Agent, localConfig: string, localEnv: string): Promise<boolean> {
   const ssh = new SshClient(agent.sshKeyPath);
   let hasDrift = false;
 
@@ -314,9 +313,7 @@ async function diffAgent(
       console.log(chalk.yellow('  .env: not found on remote'));
     }
   } catch (err) {
-    console.error(
-      `  ${chalk.red('Error')}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    console.error(`  ${chalk.red('Error')}: ${err instanceof Error ? err.message : String(err)}`);
     hasDrift = true;
   } finally {
     ssh.disconnect();

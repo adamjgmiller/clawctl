@@ -50,10 +50,7 @@ export async function provisionEc2Instance(
     throw new Error('EC2 RunInstances did not return an instance ID');
   }
 
-  await waitUntilInstanceRunning(
-    { client, maxWaitTime: 300 },
-    { InstanceIds: [instanceId] },
-  );
+  await waitUntilInstanceRunning({ client, maxWaitTime: 300 }, { InstanceIds: [instanceId] });
 
   const describeResult = await client.send(
     new DescribeInstancesCommand({ InstanceIds: [instanceId] }),

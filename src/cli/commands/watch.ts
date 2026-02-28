@@ -42,16 +42,38 @@ export function createWatchCommand(): Command {
             const ts = new Date().toLocaleTimeString();
             if (newStatus === 'offline') {
               console.log(`${ts} ${chalk.red('OFFLINE')} ${s.agent.name}`);
-              await alert('critical', `Agent offline: ${s.agent.name}`, `${s.agent.name} (${s.agent.tailscaleIp}) is unreachable.`, s.agent.id, s.agent.name);
+              await alert(
+                'critical',
+                `Agent offline: ${s.agent.name}`,
+                `${s.agent.name} (${s.agent.tailscaleIp}) is unreachable.`,
+                s.agent.id,
+                s.agent.name,
+              );
             } else if (newStatus === 'degraded') {
               console.log(`${ts} ${chalk.yellow('DEGRADED')} ${s.agent.name}: ${s.error}`);
-              await alert('warning', `Agent degraded: ${s.agent.name}`, `${s.error ?? 'unknown error'}`, s.agent.id, s.agent.name);
+              await alert(
+                'warning',
+                `Agent degraded: ${s.agent.name}`,
+                `${s.error ?? 'unknown error'}`,
+                s.agent.id,
+                s.agent.name,
+              );
             } else if (newStatus === 'online') {
               console.log(`${ts} ${chalk.green('RECOVERED')} ${s.agent.name}`);
-              await alert('info', `Agent recovered: ${s.agent.name}`, `${s.agent.name} is back online.`, s.agent.id, s.agent.name);
+              await alert(
+                'info',
+                `Agent recovered: ${s.agent.name}`,
+                `${s.agent.name} is back online.`,
+                s.agent.id,
+                s.agent.name,
+              );
             }
           }
-          await audit('agent.status', { agentId: s.agent.id, agentName: s.agent.name, success: s.reachable });
+          await audit('agent.status', {
+            agentId: s.agent.id,
+            agentName: s.agent.name,
+            success: s.reachable,
+          });
         }
 
         process.stdout.write('\x1b[2K\r');
