@@ -53,10 +53,15 @@ All inter-agent communication goes over Tailscale (encrypted, no public ports ne
 - [x] Basic health check (ping agent, get openclaw status)
 - [x] AWS SDK v3 setup + credential config
 - [x] Agent provisioning: `clawctl agents deploy` — SSH into a fresh host (EC2 or existing), install OpenClaw via official install script (`curl -fsSL https://docs.openclaw.ai/install.sh | bash` or equivalent), configure openclaw.json + .env, set up systemd service, and register in the fleet. Should support both fresh EC2 spin-up and "adopt" an existing server.
-- [ ] Add Tailscale integration to the existing scaffold
-- [ ] Add a gitleaks pre-commit hook to the repo
-
-(Note to self: re-run /init)
+- [x] Tailscale integration — `network status`, `network list`, `network tag` commands via Tailscale API v2
+- [x] `clawctl init` — interactive setup of ~/.clawctl/ with config and templates directory
+- [x] `agents info` — detailed agent view, `agents update` — field-level updates
+- [x] Status persistence — `agents status` writes online/offline/degraded back to registry
+- [x] `agents status --verbose` — detailed openclaw status output (version, uptime, model, channels)
+- [x] `agents logs <id>` — SSH log tailing with --lines and --follow support
+- [x] Colored CLI output via chalk (green/red/yellow for status indicators)
+- [x] Gitleaks pre-commit hook
+- [ ] Deploy templates — bundled openclaw.json / .env / cron templates in ~/.clawctl/templates/
 
 ## Phase 2: Config & Secrets
 - [ ] Secrets vault via AWS Secrets Manager (per-agent secret scoping, access by policy)
@@ -80,7 +85,7 @@ The dashboard is a first-class feature, not an afterthought. The model is: **int
 - [ ] Read-only by default, with optional action buttons (restart, sync config) behind confirmation
 
 ## Phase 5: Fleet Operations
-- [ ] EC2 instance provisioning for new agents
+- [x] EC2 instance provisioning for new agents (done in Phase 1 via `agents deploy fresh`)
 - [ ] SSM integration (remote commands without SSH)
 - [ ] Rolling updates across fleet
 - [ ] CloudWatch log aggregation + alerting
