@@ -1,2 +1,2 @@
-export { getAgentStatus, formatStatusTable } from './status.js';
+export { getAgentStatus, formatStatusTable, formatVerboseStatus } from './status.js';
 export type { AgentStatusResult } from './status.js';

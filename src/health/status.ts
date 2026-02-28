@@ -40,6 +40,71 @@ export async function getAgentStatus(agent: Agent): Promise<AgentStatusResult> {
   }
 }
 
+export function formatVerboseStatus(status: Record<string, unknown>): string[] {
+  const lines: string[] = [];
+
+  // Extract the most useful top-level fields from openclaw status JSON
+  const gateway = status.gateway as Record<string, unknown> | undefined;
+  const sessions = status.sessions as Record<string, unknown> | undefined;
+  const os = status.os as Record<string, unknown> | undefined;
+
+  // Version — could be top-level or nested in gateway
+  const version = status.version ?? gateway?.version;
+  if (version) lines.push(`  Version:      ${version}`);
+
+  // Uptime — top-level or gateway
+  const uptime = status.uptime ?? gateway?.uptime;
+  if (uptime) lines.push(`  Uptime:       ${uptime}`);
+
+  // Model
+  const model = status.model ?? gateway?.model;
+  if (model) lines.push(`  Model:        ${model}`);
+
+  // Active channels
+  const channels = status.channels ?? gateway?.channels;
+  if (channels) {
+    if (Array.isArray(channels)) {
+      lines.push(`  Channels:     ${channels.join(', ')}`);
+    } else {
+      lines.push(`  Channels:     ${channels}`);
+    }
+  }
+
+  // Active sessions count
+  if (sessions) {
+    const active = sessions.active ?? sessions.count;
+    if (active !== undefined) {
+      lines.push(`  Sessions:     ${active}`);
+    }
+  }
+
+  // OS info
+  if (os) {
+    const osInfo = [os.platform, os.arch, os.release].filter(Boolean).join(' ');
+    if (osInfo) lines.push(`  OS:           ${osInfo}`);
+  }
+
+  // Print remaining top-level fields not already handled
+  const handled = new Set(['version', 'uptime', 'model', 'channels', 'gateway', 'sessions', 'os']);
+  for (const [k, v] of Object.entries(status)) {
+    if (handled.has(k)) continue;
+    if (v !== null && typeof v === 'object') {
+      lines.push(`  ${k}:`);
+      for (const [subK, subV] of Object.entries(v as Record<string, unknown>)) {
+        if (subV !== null && typeof subV === 'object') {
+          lines.push(`    ${subK}: ${JSON.stringify(subV)}`);
+        } else {
+          lines.push(`    ${subK}: ${String(subV)}`);
+        }
+      }
+    } else {
+      lines.push(`  ${k.padEnd(12)}  ${String(v)}`);
+    }
+  }
+
+  return lines;
+}
+
 export function formatStatusTable(results: AgentStatusResult[]): string {
   const header = ['NAME', 'ROLE', 'HOST', 'TAILSCALE IP', 'REACHABLE', 'STATUS'];
   const rows = results.map((r) => {

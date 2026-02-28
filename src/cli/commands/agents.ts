@@ -8,7 +8,7 @@ import {
 } from '../../types/index.js';
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
-import { getAgentStatus, formatStatusTable } from '../../health/index.js';
+import { getAgentStatus, formatStatusTable, formatVerboseStatus } from '../../health/index.js';
 import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
@@ -298,16 +298,8 @@ export function createAgentsCommand(): Command {
           console.log(`  Tailscale IP: ${s.agent.tailscaleIp}`);
           console.log(`  Reachable:    ${s.reachable ? chalk.green('yes') : chalk.red('no')}`);
           if (s.openclawStatus) {
-            const st = s.openclawStatus;
-            if (st.version) console.log(`  Version:      ${st.version}`);
-            if (st.uptime) console.log(`  Uptime:       ${st.uptime}`);
-            if (st.model) console.log(`  Model:        ${st.model}`);
-            if (st.channels) console.log(`  Channels:     ${Array.isArray(st.channels) ? (st.channels as string[]).join(', ') : st.channels}`);
-            // Print any other fields
-            for (const [k, v] of Object.entries(st)) {
-              if (!['version', 'uptime', 'model', 'channels'].includes(k)) {
-                console.log(`  ${k.padEnd(12)}  ${String(v)}`);
-              }
+            for (const line of formatVerboseStatus(s.openclawStatus)) {
+              console.log(line);
             }
           } else if (s.raw) {
             console.log(`  Output:       ${s.raw}`);
