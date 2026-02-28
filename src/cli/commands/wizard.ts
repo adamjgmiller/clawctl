@@ -58,15 +58,195 @@ async function orchestratorWizard(): Promise<void> {
   console.log('');
 
   // Target server
-  const tailscaleIp = await input({
-    message: 'Tailscale IP of the server to deploy on:',
-    validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP address',
+  const serverSource = await select({
+    message: 'Where should the orchestrator run?',
+    choices: [
+      { name: 'I have a server ready (Tailscale IP)', value: 'existing' },
+      { name: 'Create a new EC2 instance on AWS', value: 'aws' },
+    ],
   });
-  const sshUser = await input({ message: 'SSH username on that server:', default: 'openclaw' });
-  const sshKey = await input({
-    message: 'Path to your SSH private key:',
-    default: '~/.ssh/id_ed25519',
-  });
+
+  let tailscaleIp: string;
+  let sshUser: string;
+  let sshKey: string;
+  let awsInstanceId: string | undefined;
+  let awsRegion: string | undefined;
+
+  if (serverSource === 'aws') {
+    console.log('');
+    console.log(chalk.bold('AWS EC2 Setup'));
+    console.log(chalk.dim('I\'ll create a new instance and install Tailscale + OpenClaw on it.\n'));
+
+    const awsKeyId = await input({
+      message: 'AWS Access Key ID:',
+      validate: (v: string) => v.startsWith('AKIA') || v.startsWith('ASIA') || 'Should start with AKIA... or ASIA...',
+    });
+    const awsSecret = await input({
+      message: 'AWS Secret Access Key:',
+      validate: (v: string) => v.length > 20 || 'Enter a valid secret key',
+    });
+    awsRegion = await select({
+      message: 'AWS Region:',
+      choices: [
+        { name: 'US East (N. Virginia) — us-east-1', value: 'us-east-1' },
+        { name: 'US West (Oregon) — us-west-2', value: 'us-west-2' },
+        { name: 'EU West (Ireland) — eu-west-1', value: 'eu-west-1' },
+        { name: 'EU Central (Frankfurt) — eu-central-1', value: 'eu-central-1' },
+        { name: 'AP Southeast (Singapore) — ap-southeast-1', value: 'ap-southeast-1' },
+        { name: 'Other (enter manually)', value: 'custom' },
+      ],
+    });
+    if (awsRegion === 'custom') {
+      awsRegion = await input({ message: 'AWS Region (e.g. us-east-2):' });
+    }
+
+    const instanceType = await select({
+      message: 'Instance size:',
+      choices: [
+        { name: 't3.micro — 2 vCPU, 1 GB (free tier eligible, light use)', value: 't3.micro' },
+        { name: 't3.small — 2 vCPU, 2 GB (recommended for orchestrator)', value: 't3.small' },
+        { name: 't3.medium — 2 vCPU, 4 GB (heavier workloads)', value: 't3.medium' },
+        { name: 'Other (enter manually)', value: 'custom' },
+      ],
+    });
+    const instanceTypeId = instanceType === 'custom' ? await input({ message: 'Instance type:' }) : instanceType;
+
+    const keyPair = await input({
+      message: 'EC2 Key Pair name (for SSH access):',
+      validate: (v: string) => v.length > 0 || 'Required',
+    });
+
+    sshKey = await input({
+      message: 'Local path to the matching SSH private key:',
+      default: '~/.ssh/' + keyPair + '.pem',
+    });
+
+    const tailscaleAuthKey = await input({
+      message: 'Tailscale auth key (from admin.tailscale.com/keys):',
+      validate: (v: string) => v.startsWith('tskey-') || 'Should start with tskey-...',
+    });
+
+    console.log('');
+    console.log(chalk.dim('Provisioning EC2 instance...'));
+
+    // Set AWS credentials for this process
+    process.env.AWS_ACCESS_KEY_ID = awsKeyId;
+    process.env.AWS_SECRET_ACCESS_KEY = awsSecret;
+    process.env.AWS_REGION = awsRegion;
+
+    const { EC2Client, RunInstancesCommand, DescribeInstancesCommand, waitUntilInstanceRunning } = await import('@aws-sdk/client-ec2');
+    const ec2 = new EC2Client({ region: awsRegion });
+
+    // Find latest Ubuntu 24.04 AMI
+    const { DescribeImagesCommand } = await import('@aws-sdk/client-ec2');
+    console.log(chalk.dim('  Finding latest Ubuntu 24.04 AMI...'));
+    const amiRes = await ec2.send(new DescribeImagesCommand({
+      Owners: ['099720109477'],
+      Filters: [
+        { Name: 'name', Values: ['ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*'] },
+        { Name: 'state', Values: ['available'] },
+      ],
+    }));
+    const amis = (amiRes.Images || []).sort((a, b) => (b.CreationDate || '').localeCompare(a.CreationDate || ''));
+    if (amis.length === 0) throw new Error('No Ubuntu 24.04 AMI found in ' + awsRegion);
+    const ami = amis[0].ImageId!;
+    console.log(chalk.dim('  Using AMI: ' + ami));
+
+    // User data script to install Tailscale + OpenClaw
+    const userData = Buffer.from([
+      '#!/bin/bash',
+      'set -e',
+      '# Install Tailscale',
+      'curl -fsSL https://tailscale.com/install.sh | sh',
+      'tailscale up --auth-key=' + tailscaleAuthKey + ' --hostname=orchestrator',
+      '# Create user',
+      'useradd -m -s /bin/bash openclaw || true',
+      '# Install NVM + Node for openclaw user',
+      'su - openclaw -c "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash"',
+      'su - openclaw -c "source ~/.nvm/nvm.sh && nvm install 22 && npm i -g openclaw@latest"',
+      '# Enable linger for systemd user services',
+      'loginctl enable-linger openclaw',
+    ].join('\n')).toString('base64');
+
+    console.log(chalk.dim('  Launching instance (' + instanceTypeId + ')...'));
+    const runRes = await ec2.send(new RunInstancesCommand({
+      ImageId: ami,
+      InstanceType: instanceTypeId as any,
+      KeyName: keyPair,
+      MinCount: 1,
+      MaxCount: 1,
+      UserData: userData,
+      TagSpecifications: [{
+        ResourceType: 'instance',
+        Tags: [
+          { Key: 'Name', Value: 'clawctl-orchestrator' },
+          { Key: 'ManagedBy', Value: 'clawctl' },
+        ],
+      }],
+    }));
+
+    awsInstanceId = runRes.Instances?.[0]?.InstanceId;
+    if (!awsInstanceId) throw new Error('Failed to get instance ID');
+    console.log(chalk.dim('  Instance ID: ' + awsInstanceId));
+
+    console.log(chalk.dim('  Waiting for instance to be running...'));
+    await waitUntilInstanceRunning({ client: ec2, maxWaitTime: 300 }, { InstanceIds: [awsInstanceId] });
+
+    // Get public IP for initial SSH (before Tailscale is up)
+    const descRes = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [awsInstanceId] }));
+    const publicIp = descRes.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress;
+    console.log(chalk.dim('  Public IP: ' + (publicIp || 'none')));
+
+    console.log(chalk.yellow('  Waiting 60s for user-data to install Tailscale + OpenClaw...'));
+    await new Promise(r => setTimeout(r, 60000));
+
+    // Try to find the Tailscale IP
+    console.log(chalk.dim('  Looking for Tailscale IP...'));
+    const resolvedKey = sshKey.replace('~', process.env.HOME ?? '');
+    const tmpSsh = new SshClient(resolvedKey);
+    let attempts = 0;
+    tailscaleIp = '';
+    while (attempts < 10 && !tailscaleIp) {
+      attempts++;
+      try {
+        await tmpSsh.connectTo(publicIp!, 'ubuntu');
+        const tsIp = await tmpSsh.exec('tailscale ip -4 2>/dev/null || echo ""');
+        tailscaleIp = tsIp.stdout.trim();
+        tmpSsh.disconnect();
+      } catch {
+        tmpSsh.disconnect();
+        if (attempts < 10) {
+          console.log(chalk.dim('  Attempt ' + attempts + '/10, retrying in 15s...'));
+          await new Promise(r => setTimeout(r, 15000));
+        }
+      }
+    }
+
+    if (!tailscaleIp) {
+      console.log(chalk.yellow('  Could not detect Tailscale IP automatically.'));
+      tailscaleIp = await input({
+        message: 'Enter the Tailscale IP manually (check admin.tailscale.com):',
+        validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP',
+      });
+    } else {
+      console.log(chalk.green('  Tailscale IP: ' + tailscaleIp));
+    }
+
+    sshUser = 'openclaw';
+    console.log(chalk.green('  ✓ EC2 instance provisioned'));
+    console.log('');
+  } else {
+    tailscaleIp = await input({
+      message: 'Tailscale IP of the server:',
+      validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP address',
+    });
+    sshUser = await input({ message: 'SSH username:', default: 'openclaw' });
+    sshKey = await input({
+      message: 'Path to your SSH private key:',
+      default: '~/.ssh/id_ed25519',
+    });
+  }
+
   const agentName = await input({ message: 'Name for this orchestrator:', default: 'orchestrator' });
 
   console.log('');
