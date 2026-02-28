@@ -39,6 +39,7 @@ export async function provisionEc2Instance(
           Tags: [
             { Key: 'Name', Value: input.name },
             { Key: 'ManagedBy', Value: 'clawctl' },
+            { Key: 'Project', Value: 'clawctl' },
           ],
         },
       ],

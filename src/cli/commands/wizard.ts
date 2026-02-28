@@ -181,6 +181,7 @@ async function orchestratorWizard(): Promise<void> {
         Tags: [
           { Key: 'Name', Value: 'clawctl-orchestrator' },
           { Key: 'ManagedBy', Value: 'clawctl' },
+          { Key: 'Project', Value: 'clawctl' },
         ],
       }],
     }));
