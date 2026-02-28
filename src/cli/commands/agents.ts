@@ -9,6 +9,7 @@ import {
 import { JsonAgentStore } from '../../registry/index.js';
 import type { AgentStore } from '../../registry/index.js';
 import { getAgentStatus, formatStatusTable } from '../../health/index.js';
+import { SshClient } from '../../ssh/index.js';
 import { loadConfig } from '../../config/index.js';
 import { freshDeploy, adoptDeploy } from '../../deploy/index.js';
 
@@ -317,6 +318,49 @@ export function createAgentsCommand(): Command {
         }
       } else {
         console.log(formatStatusTable(statuses));
+      }
+    });
+
+  agents
+    .command('logs')
+    .description('Tail openclaw gateway logs from an agent')
+    .argument('<id>', 'Agent ID')
+    .option('--lines <n>', 'Number of lines to show', '50')
+    .option('--follow', 'Follow log output (live tail)')
+    .action(async (id: string, opts: { lines: string; follow?: boolean }) => {
+      const store = createStore();
+      const agent = await store.get(id);
+      if (!agent) {
+        console.error(`Agent ${id} not found.`);
+        process.exitCode = 1;
+        return;
+      }
+
+      const logDir = '/tmp/openclaw';
+      const lines = parseInt(opts.lines, 10) || 50;
+      const tailFlag = opts.follow ? '-f' : '';
+      const cmd = `tail ${tailFlag} -n ${lines} ${logDir}/*.log 2>/dev/null || echo "No log files found in ${logDir}/"`;
+
+      const ssh = new SshClient(agent.sshKeyPath);
+      try {
+        await ssh.connect(agent);
+        if (opts.follow) {
+          // For --follow, stream output directly to stdout
+          console.log(chalk.dim(`Tailing logs on ${agent.name} (${agent.tailscaleIp})... Ctrl+C to stop\n`));
+          const result = await ssh.exec(cmd);
+          process.stdout.write(result.stdout);
+          if (result.stderr) process.stderr.write(result.stderr);
+        } else {
+          const result = await ssh.exec(cmd);
+          if (result.stdout) process.stdout.write(result.stdout);
+          if (result.stderr) process.stderr.write(result.stderr);
+          if (result.code !== 0) process.exitCode = 1;
+        }
+      } catch (err) {
+        console.error(`Failed to connect to ${agent.name}: ${err instanceof Error ? err.message : String(err)}`);
+        process.exitCode = 1;
+      } finally {
+        ssh.disconnect();
       }
     });
 
