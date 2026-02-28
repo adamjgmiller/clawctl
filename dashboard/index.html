@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clawctl Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e1e4e8; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    .subtitle { color: #8b949e; margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+    .card h3 { font-size: 14px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+    .agent-name { font-size: 18px; font-weight: 600; }
+    .agent-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+    .agent-row .label { color: #8b949e; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .status-online { background: #0d3117; color: #3fb950; }
+    .status-offline { background: #3d1214; color: #f85149; }
+    .status-degraded { background: #3d2b00; color: #d29922; }
+    .status-unknown { background: #21262d; color: #8b949e; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table th { text-align: left; padding: 8px 12px; color: #8b949e; border-bottom: 1px solid #30363d; font-weight: 600; }
+    table td { padding: 8px 12px; border-bottom: 1px solid #21262d; }
+    .section { margin-bottom: 32px; }
+    .section h2 { font-size: 18px; margin-bottom: 12px; }
+    .loading { color: #8b949e; text-align: center; padding: 40px; }
+    .tag { display: inline-block; padding: 1px 6px; background: #21262d; border-radius: 4px; font-size: 12px; margin: 1px; }
+    .pill { display: inline-block; padding: 2px 8px; background: #21262d; border-radius: 4px; font-size: 12px; }
+    .effect-allow { color: #3fb950; }
+    .effect-deny { color: #f85149; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <h1>🦞 clawctl Dashboard</h1>
+    <p class="subtitle">Fleet overview</p>
+    <div class="loading" id="loading">Loading fleet data...</div>
+    <div id="content" style="display:none">
+      <div class="section">
+        <h2>Agents</h2>
+        <div class="grid" id="agents-grid"></div>
+      </div>
+      <div class="section">
+        <h2>Policy Rules</h2>
+        <div id="policy-section"></div>
+      </div>
+      <div class="section">
+        <h2>Recent Audit Log</h2>
+        <div style="overflow-x:auto"><table id="audit-table"><thead><tr><th>Time</th><th>Action</th><th>Agent</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const API = window.location.origin + '/api';
+
+    function statusClass(s) {
+      return 'status status-' + (s || 'unknown');
+    }
+
+    function renderAgent(a) {
+      const tags = (a.tags || []).map(t => `<span class="tag">${t}</span>`).join(' ') || '<span class="tag">none</span>';
+      return `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="agent-name">${a.name}</span>
+          <span class="${statusClass(a.status)}">${a.status}</span>
+        </div>
+        <div class="agent-row"><span class="label">Role</span><span class="pill">${a.role}</span></div>
+        <div class="agent-row"><span class="label">Host</span><span>${a.host}</span></div>
+        <div class="agent-row"><span class="label">Tailscale IP</span><span>${a.tailscaleIp}</span></div>
+        <div class="agent-row"><span class="label">User</span><span>${a.user}</span></div>
+        <div class="agent-row"><span class="label">Tags</span><span>${tags}</span></div>
+      </div>`;
+    }
+
+    function renderPolicy(pol) {
+      if (!pol.rules || pol.rules.length === 0) return '<p style="color:#8b949e">No policy rules defined.</p>';
+      let html = `<p style="color:#8b949e;margin-bottom:8px">Default: <span class="effect-${pol.defaultEffect}">${pol.defaultEffect}</span></p>`;
+      html += '<table><thead><tr><th>Rule</th><th>Action</th><th>Effect</th><th>Conditions</th><th>Confirm?</th></tr></thead><tbody>';
+      for (const r of pol.rules) {
+        const conds = (r.conditions || []).map(c => `${c.field} ${c.op} ${Array.isArray(c.value) ? c.value.join(',') : c.value}`).join('; ') || '-';
+        html += `<tr><td>${r.id}</td><td>${r.action}</td><td class="effect-${r.effect}">${r.effect}</td><td>${conds}</td><td>${r.requireConfirmation ? '⚠️' : '-'}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      return html;
+    }
+
+    function renderAudit(entries) {
+      const tbody = document.querySelector('#audit-table tbody');
+      tbody.innerHTML = entries.map(e => {
+        const t = new Date(e.timestamp).toLocaleString();
+        const agent = e.meta?.agentName || e.meta?.agentId || '-';
+        const detail = e.meta?.error || (e.meta?.detail ? JSON.stringify(e.meta.detail).slice(0,80) : '-');
+        return `<tr><td>${t}</td><td>${e.action}</td><td>${agent}</td><td>${detail}</td></tr>`;
+      }).join('');
+    }
+
+    async function load() {
+      try {
+        const [agents, audit, policy] = await Promise.all([
+          fetch(API + '/agents').then(r => r.json()),
+          fetch(API + '/audit?limit=30').then(r => r.json()),
+          fetch(API + '/policy').then(r => r.json()),
+        ]);
+        document.getElementById('agents-grid').innerHTML = agents.map(renderAgent).join('');
+        document.getElementById('policy-section').innerHTML = renderPolicy(policy);
+        renderAudit(audit);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+      } catch (err) {
+        document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
+      }
+    }
+
+    load();
+    setInterval(load, 15000);
+  </script>
+</body>
+</html>
