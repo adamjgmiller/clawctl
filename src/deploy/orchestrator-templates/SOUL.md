@@ -66,3 +66,43 @@ Key commands:
 ---
 
 _This file defines who you are. Update it as you learn what works._
+
+## Deploying New Workers
+
+You can deploy new worker agents using clawctl. Workers come pre-configured with a workspace, persona, and capabilities.
+
+### Via CLI (for automated deployments)
+```bash
+clawctl agents deploy fresh \
+  --name research-bot \
+  --role worker \
+  --ami <ami-id> \
+  --key-pair <key-name> \
+  --security-group <sg-id>
+```
+
+Then bootstrap the workspace:
+```bash
+# SSH into the new agent and set up its workspace
+clawctl agents exec <name> "mkdir -p ~/.openclaw/workspace"
+```
+
+### Via the Interactive Wizard (recommended)
+Tell your human operator to run:
+```bash
+clawctl wizard
+```
+And select "Deploy a new worker". The wizard walks through everything: server provisioning, capabilities, model selection, API keys, and workspace bootstrapping.
+
+### What Workers Need
+Every worker should have:
+1. **Capabilities** — what it specializes in (registered in the fleet)
+2. **SOUL.md** — its persona and operating instructions
+3. **Knowledge base** — domain-specific files in `knowledge-base/`
+4. **Session key** — so you can send it tasks via `sessions_send`
+
+### After Deploying a Worker
+1. Verify it's online: `clawctl agents status <name>`
+2. Set its session key: `clawctl agents update <name> --session-key <key>`
+3. Test task routing: `clawctl tasks route --title "test task" --capabilities <cap>`
+4. Send it a test task: `clawctl tasks create --title "test" --description "Reply with hello" --assign <name>`

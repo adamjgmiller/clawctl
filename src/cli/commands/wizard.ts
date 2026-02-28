@@ -20,6 +20,7 @@ export function createWizardCommand(): Command {
         message: 'What would you like to do?',
         choices: [
           { name: 'Deploy a new orchestrator', value: 'orchestrator' },
+          { name: 'Deploy a new worker', value: 'worker' },
           { name: 'Add an existing agent to the fleet', value: 'add-agent' },
           { name: 'Configure alerting (Telegram)', value: 'alerts' },
           { name: 'Run initial fleet health check', value: 'health' },
@@ -27,6 +28,7 @@ export function createWizardCommand(): Command {
       });
 
       if (action === 'orchestrator') await orchestratorWizard();
+      else if (action === 'worker') await workerWizard();
       else if (action === 'add-agent') await addAgentWizard();
       else if (action === 'alerts') await alertsWizard();
       else if (action === 'health') await healthWizard();
@@ -443,6 +445,225 @@ async function orchestratorWizard(): Promise<void> {
       agentId: agent.id,
       agentName: agent.name,
       detail: { fleet: fleet.length, operator: operatorName } as Record<string, unknown>,
+    });
+  } catch (err) {
+    console.error(chalk.red('\nDeploy failed: ' + (err instanceof Error ? err.message : String(err))));
+    process.exitCode = 1;
+  } finally {
+    ssh.disconnect();
+  }
+}
+
+async function workerWizard(): Promise<void> {
+  console.log('');
+  console.log(chalk.bold('Deploy a Fleet Worker'));
+  console.log(chalk.dim('I\'ll set up a specialized worker agent.\n'));
+
+  // Worker identity
+  const name = await input({ message: 'Worker name (e.g. research-bot, content-writer):' });
+  const description = await input({ message: 'What does this worker do?' });
+  const capabilities = await input({
+    message: 'Capabilities (comma-separated, e.g. research,writing,analysis):',
+    validate: (v: string) => v.length > 0 || 'At least one capability required',
+  });
+
+  // Operator info
+  const operatorName = await input({ message: 'Your name (the human operator):' });
+  const operatorTimezone = await input({ message: 'Your timezone:', default: 'America/Los_Angeles' });
+
+  console.log('');
+
+  // Find orchestrator in fleet
+  const store = new JsonAgentStore();
+  const fleet = await store.list();
+  const orchestrators = fleet.filter(a => a.role === 'orchestrator');
+  let orchestratorName = '';
+  let orchestratorSessionKey = '';
+  if (orchestrators.length > 0) {
+    const orchChoice = orchestrators.length === 1
+      ? orchestrators[0]
+      : await select({
+          message: 'Which orchestrator manages this worker?',
+          choices: orchestrators.map(o => ({ name: o.name, value: o })),
+        });
+    const orch = orchestrators.length === 1 ? orchestrators[0] : orchChoice as any;
+    orchestratorName = orch.name;
+    orchestratorSessionKey = (orch as any).sessionKey || '';
+    console.log(chalk.dim('  Orchestrator: ' + orchestratorName));
+  }
+
+  // Server
+  const serverSource = await select({
+    message: 'Where should the worker run?',
+    choices: [
+      { name: 'I have a server ready (Tailscale IP)', value: 'existing' },
+      { name: 'Create a new EC2 instance on AWS', value: 'aws' },
+    ],
+  });
+
+  let tailscaleIp: string;
+  let sshUser: string;
+  let sshKey: string;
+
+  if (serverSource === 'aws') {
+    // Reuse the same AWS flow — for now, keep it simple
+    console.log(chalk.yellow('\nFor AWS provisioning, use: clawctl agents deploy fresh'));
+    console.log('Then come back and run the wizard to bootstrap the worker workspace.');
+    console.log('Or provide an existing server below.\n');
+    tailscaleIp = await input({
+      message: 'Tailscale IP of the server:',
+      validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP',
+    });
+    sshUser = await input({ message: 'SSH username:', default: 'openclaw' });
+    sshKey = await input({ message: 'SSH private key path:', default: '~/.ssh/id_ed25519' });
+  } else {
+    tailscaleIp = await input({
+      message: 'Tailscale IP of the server:',
+      validate: (v: string) => /^\d+\.\d+\.\d+\.\d+$/.test(v) || 'Enter a valid IP',
+    });
+    sshUser = await input({ message: 'SSH username:', default: 'openclaw' });
+    sshKey = await input({ message: 'SSH private key path:', default: '~/.ssh/id_ed25519' });
+  }
+
+  console.log('');
+
+  // Model
+  const model = await select({
+    message: 'Which model should this worker use?',
+    choices: [
+      { name: 'Claude Sonnet 4 (good balance)', value: 'anthropic/claude-sonnet-4-6' },
+      { name: 'Claude Opus 4 (most capable)', value: 'anthropic/claude-opus-4-6' },
+      { name: 'GPT-5 Mini (fast, affordable)', value: 'openai/gpt-5-mini' },
+      { name: 'Custom', value: 'custom' },
+    ],
+  });
+  const modelId = model === 'custom' ? await input({ message: 'Model ID:' }) : model;
+
+  // API key
+  const apiProvider = await select({
+    message: 'API provider:',
+    choices: [
+      { name: 'Anthropic', value: 'anthropic' },
+      { name: 'OpenAI', value: 'openai' },
+    ],
+  });
+  const apiKey = await input({
+    message: apiProvider + ' API key:',
+    validate: (v: string) => v.length > 10 || 'Enter a valid API key',
+  });
+
+  // Telegram?
+  const setupTelegram = await confirm({ message: 'Set up Telegram channel?', default: false });
+  let telegramToken = '';
+  if (setupTelegram) {
+    telegramToken = await input({
+      message: 'Telegram bot token:',
+      validate: (v: string) => v.includes(':') || 'Should look like 123456:ABC...',
+    });
+  }
+
+  // Summary
+  console.log('');
+  console.log(chalk.bold('Summary:'));
+  console.log('  Name:          ' + name);
+  console.log('  Capabilities:  ' + capabilities);
+  console.log('  Description:   ' + description);
+  console.log('  Server:        ' + sshUser + '@' + tailscaleIp);
+  console.log('  Model:         ' + modelId);
+  console.log('  Orchestrator:  ' + (orchestratorName || 'none'));
+  console.log('');
+
+  const proceed = await confirm({ message: 'Deploy this worker?', default: true });
+  if (!proceed) { console.log(chalk.yellow('Cancelled.')); return; }
+
+  console.log('');
+  const resolvedKey = sshKey.replace('~', process.env.HOME ?? '');
+  const ssh = new SshClient(resolvedKey);
+
+  try {
+    console.log(chalk.dim('Connecting to ' + tailscaleIp + '...'));
+    await ssh.connectTo(tailscaleIp, sshUser);
+
+    // Check OpenClaw
+    const check = await ssh.exec('source ~/.nvm/nvm.sh 2>/dev/null; which openclaw 2>/dev/null');
+    if (!check.stdout.trim()) {
+      console.log('Installing OpenClaw...');
+      await ssh.exec('curl -fsSL https://docs.openclaw.ai/install.sh | bash');
+      console.log(chalk.green('  OpenClaw installed'));
+    } else {
+      console.log(chalk.dim('  OpenClaw already installed'));
+    }
+
+    // Bootstrap worker workspace
+    const { bootstrapWorker } = await import('../../deploy/worker.js');
+    await bootstrapWorker(ssh, {
+      name,
+      capabilities: capabilities.split(',').map(c => c.trim()),
+      description,
+      operatorName,
+      operatorTimezone,
+      orchestratorName,
+      orchestratorSessionKey,
+    }, fleet, (msg) => console.log('  ' + msg));
+
+    // Generate openclaw.json
+    console.log('  Writing openclaw.json...');
+    const openclawConfig: Record<string, unknown> = {
+      meta: { name, role: 'worker' },
+      auth: { [apiProvider]: { apiKey } },
+      agents: { default: 'main', entries: [{ id: 'main', model: modelId }] },
+      messages: { defaultModel: modelId, contextTokens: 200000 },
+      heartbeat: { agents: [{ agentId: 'main', enabled: true, every: '30m' }] },
+    };
+    if (setupTelegram) {
+      (openclawConfig as any).channels = { telegram: { enabled: true, token: telegramToken } };
+    }
+    await ssh.putContent(JSON.stringify(openclawConfig, null, 2) + '\n', '~/.openclaw/openclaw.json');
+
+    // Write .env
+    console.log('  Writing .env...');
+    const envKey = apiProvider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
+    await ssh.putContent(envKey + '=' + apiKey + '\n', '~/.openclaw/.env');
+
+    // Register
+    const capsArray = capabilities.split(',').map(c => c.trim());
+    const agent = await store.add({
+      name,
+      host: tailscaleIp,
+      tailscaleIp,
+      role: 'worker',
+      user: sshUser,
+      tags: capsArray,
+      sshKeyPath: resolvedKey,
+      capabilities: capsArray,
+      description,
+    });
+
+    console.log('');
+    console.log(chalk.green('✓ Worker deployed!'));
+    console.log('  Agent ID:      ' + agent.id);
+    console.log('  Name:          ' + agent.name);
+    console.log('  Capabilities:  ' + capsArray.join(', '));
+    console.log('');
+
+    const startNow = await confirm({ message: 'Start the gateway now?', default: true });
+    if (startNow) {
+      console.log(chalk.dim('Starting gateway...'));
+      await ssh.exec('source ~/.nvm/nvm.sh 2>/dev/null; openclaw gateway install 2>/dev/null; systemctl --user start openclaw-gateway.service 2>/dev/null || openclaw gateway start &');
+      await new Promise(r => setTimeout(r, 3000));
+      const status = await ssh.exec('systemctl --user is-active openclaw-gateway.service 2>/dev/null || echo "starting"');
+      console.log(status.stdout.trim() === 'active' ? chalk.green('  ✓ Gateway running') : chalk.yellow('  Status: ' + status.stdout.trim()));
+    }
+
+    console.log('');
+    console.log(chalk.bold('The orchestrator can now delegate tasks to this worker:'));
+    console.log('  clawctl tasks create --title "..." --capabilities ' + capsArray[0]);
+    console.log('');
+
+    await audit('agent.deploy.worker' as any, {
+      agentId: agent.id,
+      agentName: agent.name,
+      detail: { capabilities: capsArray, description } as Record<string, unknown>,
     });
   } catch (err) {
     console.error(chalk.red('\nDeploy failed: ' + (err instanceof Error ? err.message : String(err))));
