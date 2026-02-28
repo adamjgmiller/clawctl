@@ -8,6 +8,7 @@ import { loadDeployTemplates, getTemplatesDir } from '../../deploy/index.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { audit } from '../../audit/index.js';
+import { enforcePolicy } from '../../policy/index.js';
 
 function createStore(): AgentStore {
   return new JsonAgentStore();
@@ -32,6 +33,10 @@ export function createConfigCommand(): Command {
         process.exitCode = 1;
         return;
       }
+
+      // Policy check
+      const policy = await enforcePolicy('config.push', agent);
+      if (!policy.allowed) { process.exitCode = 1; return; }
 
       let templates;
       try {

@@ -6,6 +6,7 @@ import { createNetworkCommand } from './commands/network.js';
 import { createInitCommand } from './commands/init.js';
 import { createConfigCommand } from './commands/config.js';
 import { createSecretsCommand } from './commands/secrets.js';
+import { createPolicyCommand } from './commands/policy.js';
 
 const program = new Command('clawctl')
   .description('Agent-native control plane for managing OpenClaw fleets')
@@ -16,5 +17,6 @@ program.addCommand(createAgentsCommand());
 program.addCommand(createNetworkCommand());
 program.addCommand(createConfigCommand());
 program.addCommand(createSecretsCommand());
+program.addCommand(createPolicyCommand());
 
 await program.parseAsync();

@@ -1,3 +1,4 @@
+import { enforcePolicy } from '../../policy/index.js';
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 import chalk from 'chalk';
@@ -152,7 +153,11 @@ export function createSecretsCommand(): Command {
           return;
         }
 
-        const ssh = new SshClient(agent.sshKeyPath);
+  // Policy check
+      const policyResult = await enforcePolicy('secrets.push', agent);
+      if (!policyResult.allowed) { process.exitCode = 1; return; }
+
+            const ssh = new SshClient(agent.sshKeyPath);
         try {
           await ssh.connect(agent);
 
