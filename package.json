@@ -14,6 +14,7 @@
     "lint": "eslint src/",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'"
+    "update": "git pull && npm install && npm run build"
   },
   "keywords": [
     "openclaw",
