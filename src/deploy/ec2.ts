@@ -41,7 +41,7 @@ export async function ensureSecurityGroup(
   try {
     const result = await client.send(new CreateSecurityGroupCommand({
       GroupName: name,
-      Description: 'clawctl managed agents — SSH inbound, all outbound',
+      Description: 'clawctl managed agents - SSH inbound, all outbound',
       VpcId: vpcId,
       TagSpecifications: [{
         ResourceType: 'security-group',
