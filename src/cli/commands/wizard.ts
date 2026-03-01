@@ -7,6 +7,7 @@ import { ensureSecurityGroup } from '../../deploy/ec2.js';
 import { bootstrapOrchestrator } from '../../deploy/orchestrator.js';
 import { audit } from '../../audit/index.js';
 import { writeFile } from 'node:fs/promises';
+import { loadWizardDefaults, saveWizardDefaults } from '../../config/wizard-defaults.js';
 import { join } from 'node:path';
 
 export function createWizardCommand(): Command {
@@ -39,12 +40,13 @@ export function createWizardCommand(): Command {
 }
 
 async function orchestratorWizard(): Promise<void> {
+  const defaults = await loadWizardDefaults();
   console.log('');
   console.log(chalk.bold('Deploy a Fleet Orchestrator'));
   console.log(chalk.dim('I\'ll walk you through setting up an orchestrator that manages your agents.\n'));
 
   // Operator info
-  const operatorName = await input({ message: 'Your name (the human operator):' });
+  const operatorName = await input({ message: 'Your name (the human operator):', default: defaults.operatorName || '' });
   const operatorTimezone = await input({
     message: 'Your timezone:',
     default: 'America/Los_Angeles',
@@ -55,7 +57,7 @@ async function orchestratorWizard(): Promise<void> {
   });
   const operatorEmail = await input({
     message: 'Your email (for reports, leave blank to skip):',
-    default: '',
+    default: defaults.operatorEmail,
   });
 
   console.log('');
@@ -81,11 +83,13 @@ async function orchestratorWizard(): Promise<void> {
     console.log(chalk.dim('I\'ll create a new instance and install Tailscale + OpenClaw on it.\n'));
 
     const awsKeyId = await input({
-      message: 'AWS Access Key ID:',
+      message: 'AWS Access Key ID:' + (defaults.awsAccessKeyId ? ' (saved: ...' + defaults.awsAccessKeyId.slice(-4) + ')' : ''),
+      default: defaults.awsAccessKeyId,
       validate: (v: string) => v.startsWith('AKIA') || v.startsWith('ASIA') || 'Should start with AKIA... or ASIA...',
     });
     const awsSecret = await input({
-      message: 'AWS Secret Access Key:',
+      message: 'AWS Secret Access Key:' + (defaults.awsSecretAccessKey ? ' (saved)' : ''),
+      default: defaults.awsSecretAccessKey,
       validate: (v: string) => v.length > 20 || 'Enter a valid secret key',
     });
     awsRegion = await select({
@@ -116,6 +120,7 @@ async function orchestratorWizard(): Promise<void> {
 
     const keyPair = await input({
       message: 'EC2 Key Pair name (for SSH access):',
+      default: defaults.keyPair,
       validate: (v: string) => v.length > 0 || 'Required',
     });
 
@@ -126,6 +131,7 @@ async function orchestratorWizard(): Promise<void> {
 
     const tailscaleAuthKey = await input({
       message: 'Tailscale auth key (from admin.tailscale.com/keys):',
+      default: defaults.tailscaleAuthKey,
       validate: (v: string) => v.startsWith('tskey-') || 'Should start with tskey-...',
     });
 
@@ -414,6 +420,16 @@ async function orchestratorWizard(): Promise<void> {
 
     console.log('');
     console.log(chalk.green('✓ Orchestrator deployed!'));
+
+    // Save wizard defaults for next run
+    await saveWizardDefaults({
+      operatorName,
+      operatorEmail: operatorEmail || undefined,
+      operatorTimezone,
+      awsAccessKeyId: serverSource === 'aws' ? process.env.AWS_ACCESS_KEY_ID : defaults.awsAccessKeyId,
+      awsSecretAccessKey: serverSource === 'aws' ? process.env.AWS_SECRET_ACCESS_KEY : defaults.awsSecretAccessKey,
+      awsRegion: awsRegion || defaults.awsRegion,
+    });
     console.log('');
     console.log('  Agent ID:  ' + agent.id);
     console.log('  Name:      ' + agent.name);
@@ -460,6 +476,7 @@ async function orchestratorWizard(): Promise<void> {
 }
 
 async function workerWizard(): Promise<void> {
+  const defaults = await loadWizardDefaults();
   console.log('');
   console.log(chalk.bold('Deploy a Fleet Worker'));
   console.log(chalk.dim('I\'ll set up a specialized worker agent.\n'));
@@ -473,7 +490,7 @@ async function workerWizard(): Promise<void> {
   });
 
   // Operator info
-  const operatorName = await input({ message: 'Your name (the human operator):' });
+  const operatorName = await input({ message: 'Your name (the human operator):', default: defaults.operatorName || '' });
   const operatorTimezone = await input({ message: 'Your timezone:', default: 'America/Los_Angeles' });
 
   console.log('');
