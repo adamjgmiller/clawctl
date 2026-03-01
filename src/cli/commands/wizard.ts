@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { input, select, confirm } from '@inquirer/prompts';
 import { JsonAgentStore } from '../../registry/index.js';
 import { SshClient } from '../../ssh/index.js';
+import { ensureSecurityGroup } from '../../deploy/ec2.js';
 import { bootstrapOrchestrator } from '../../deploy/orchestrator.js';
 import { audit } from '../../audit/index.js';
 import { writeFile } from 'node:fs/promises';
@@ -170,11 +171,15 @@ async function orchestratorWizard(): Promise<void> {
       'loginctl enable-linger openclaw',
     ].join('\n')).toString('base64');
 
+    console.log(chalk.dim('  Ensuring security group...'));
+    const sgId = await ensureSecurityGroup(ec2);
+    console.log(chalk.dim('  Security group: ' + sgId));
     console.log(chalk.dim('  Launching instance (' + instanceTypeId + ')...'));
     const runRes = await ec2.send(new RunInstancesCommand({
       ImageId: ami,
       InstanceType: instanceTypeId as any,
       KeyName: keyPair,
+      SecurityGroupIds: [sgId],
       MinCount: 1,
       MaxCount: 1,
       UserData: userData,
