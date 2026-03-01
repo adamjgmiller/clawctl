@@ -129,7 +129,7 @@ async function orchestratorWizard(): Promise<void> {
 
     sshKey = await input({
       message: 'Local path to the matching SSH private key:',
-      default: '~/.ssh/' + keyPair + '.pem',
+      default: defaults.sshKeyPath || ('~/.ssh/' + keyPair + '.pem'),
     });
 
     const tailscaleAuthKey = await input({
@@ -448,6 +448,7 @@ async function orchestratorWizard(): Promise<void> {
       awsSecretAccessKey: serverSource === 'aws' ? process.env.AWS_SECRET_ACCESS_KEY : defaults.awsSecretAccessKey,
       awsRegion: awsRegion || defaults.awsRegion,
       tailscaleApiKey: tailscaleApiKey || defaults.tailscaleApiKey,
+      sshKeyPath: sshKey || defaults.sshKeyPath,
     });
     console.log('');
     console.log('  Agent ID:  ' + agent.id);

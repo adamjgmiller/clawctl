@@ -43,7 +43,8 @@ export async function bootstrapOrchestrator(
   onStep?: (msg: string) => void,
 ): Promise<void> {
   const log = onStep ?? (() => {});
-  const workspace = '~/.openclaw/workspace';
+  const homeDir = await ssh.exec('echo $HOME');
+  const workspace = `${homeDir.stdout.trim()}/.openclaw/workspace`;
 
   log('Creating workspace directories...');
   await ssh.exec(`mkdir -p ${workspace}/memory ${workspace}/skills ${workspace}/projects`);
