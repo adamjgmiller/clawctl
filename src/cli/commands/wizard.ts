@@ -111,9 +111,9 @@ async function orchestratorWizard(): Promise<void> {
     const instanceType = await select({
       message: 'Instance size:',
       choices: [
-        { name: 't3.micro — 2 vCPU, 1 GB (free tier eligible, light use)', value: 't3.micro' },
-        { name: 't3.small — 2 vCPU, 2 GB (recommended for orchestrator)', value: 't3.small' },
-        { name: 't3.medium — 2 vCPU, 4 GB (heavier workloads)', value: 't3.medium' },
+        { name: 't3.micro — 2 vCPU, 1 GB (free tier, NOT recommended — too little RAM)', value: 't3.micro' },
+        { name: 't3.small — 2 vCPU, 2 GB (recommended minimum)', value: 't3.small' },
+        { name: 't3.medium — 2 vCPU, 4 GB (comfortable for most workloads)', value: 't3.medium' },
         { name: 'Other (enter manually)', value: 'custom' },
       ],
     });
@@ -222,8 +222,8 @@ async function orchestratorWizard(): Promise<void> {
     const publicIp = descRes.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress;
     console.log(chalk.dim('  Public IP: ' + (publicIp || 'none')));
 
-    console.log(chalk.yellow('  Waiting 60s for user-data to install Tailscale + OpenClaw...'));
-    await new Promise(r => setTimeout(r, 60000));
+    console.log(chalk.yellow('  Waiting 120s for user-data to install Tailscale + OpenClaw...'));
+    await new Promise(r => setTimeout(r, 120000));
 
     // Try to find the Tailscale IP
     console.log(chalk.dim('  Looking for Tailscale IP...'));
