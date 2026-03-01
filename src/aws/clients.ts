@@ -2,7 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { SSMClient } from '@aws-sdk/client-ssm';
 import { EC2Client } from '@aws-sdk/client-ec2';
-import { fromIni } from '@aws-sdk/credential-providers';
+import { fromIni, fromEnv } from '@aws-sdk/credential-providers';
 import { loadConfig } from '../config/index.js';
 
 interface ClientOptions {
@@ -12,10 +12,15 @@ interface ClientOptions {
 
 async function resolveOptions(overrides?: ClientOptions) {
   const config = await loadConfig();
-  return {
-    region: overrides?.region ?? config.awsRegion,
-    credentials: fromIni({ profile: overrides?.profile ?? config.awsProfile }),
-  };
+  const region = overrides?.region ?? config.awsRegion ?? process.env.AWS_REGION ?? 'us-east-1';
+
+  // Prefer env vars if set, fall back to INI profile
+  const hasEnvCreds = process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY;
+  const credentials = hasEnvCreds
+    ? fromEnv()
+    : fromIni({ profile: overrides?.profile ?? config.awsProfile });
+
+  return { region, credentials };
 }
 
 export async function createDynamoDBClient(overrides?: ClientOptions): Promise<DynamoDBClient> {

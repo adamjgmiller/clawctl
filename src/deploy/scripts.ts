@@ -1,7 +1,7 @@
 export function installTailscaleScript(authKey: string): string {
   return [
     'curl -fsSL https://tailscale.com/install.sh | sh',
-    `sudo tailscale up --authkey=${authKey} --advertise-tags=tag:clawctl`,
+    `sudo tailscale up --authkey=${authKey} --advertise-tags=tag:clawbot-clawctl`,
   ].join(' && ');
 }
 
@@ -10,7 +10,7 @@ export function getTailscaleIpScript(): string {
 }
 
 export function installOpenClawScript(): string {
-  return 'curl -fsSL https://openclaw.ai/install.sh | bash';
+  return 'curl -fsSL https://openclaw.ai/install.sh | NO_PROMPT=1 bash';
 }
 
 const SYSTEMD_UNIT = `[Unit]
