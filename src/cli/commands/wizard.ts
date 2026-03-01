@@ -78,6 +78,8 @@ async function orchestratorWizard(): Promise<void> {
   let awsRegion: string | undefined;
   let tailscaleApiKey: string | undefined;
 
+  const agentName = await input({ message: 'Name for this orchestrator:', default: 'orchestrator' });
+
   if (serverSource === 'aws') {
     console.log('');
     console.log(chalk.bold('AWS EC2 Setup'));
@@ -174,7 +176,7 @@ async function orchestratorWizard(): Promise<void> {
       'set -e',
       '# Install Tailscale',
       'curl -fsSL https://tailscale.com/install.sh | sh',
-      'tailscale up --auth-key=' + tailscaleAuthKey + ' --hostname=orchestrator',
+      'tailscale up --auth-key=' + tailscaleAuthKey + ' --hostname=' + agentName,
       '# Create user',
       'useradd -m -s /bin/bash openclaw || true',
       'mkdir -p /home/openclaw/.ssh',
@@ -277,7 +279,6 @@ async function orchestratorWizard(): Promise<void> {
     });
   }
 
-  const agentName = await input({ message: 'Name for this orchestrator:', default: 'orchestrator' });
 
   console.log('');
 
