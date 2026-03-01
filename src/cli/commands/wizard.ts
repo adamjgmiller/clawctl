@@ -366,6 +366,7 @@ async function orchestratorWizard(): Promise<void> {
       console.log(chalk.dim('  OpenClaw already installed'));
     }
 
+    const homeDir = (await ssh.exec('echo $HOME')).stdout.trim();
     // Bootstrap workspace
     await bootstrapOrchestrator(ssh, {
       operatorName,
@@ -413,7 +414,7 @@ async function orchestratorWizard(): Promise<void> {
 
     await ssh.putContent(
       JSON.stringify(openclawConfig, null, 2) + '\n',
-      '~/.openclaw/openclaw.json',
+      `${homeDir}/.openclaw/openclaw.json`,
     );
 
     // Write .env with API key
@@ -422,7 +423,7 @@ async function orchestratorWizard(): Promise<void> {
     if (apiProvider === 'anthropic') envLines.push(`ANTHROPIC_API_KEY=${apiKey}`);
     else envLines.push(`OPENAI_API_KEY=${apiKey}`);
     if (tailscaleApiKey) envLines.push(`TAILSCALE_API_KEY=${tailscaleApiKey}`);
-    await ssh.putContent(envLines.join('\n') + '\n', '~/.openclaw/.env');
+    await ssh.putContent(envLines.join('\n') + '\n', `${homeDir}/.openclaw/.env`);
 
     // Register in fleet
     const agent = await store.add({
@@ -637,6 +638,7 @@ async function workerWizard(): Promise<void> {
     }
 
     // Bootstrap worker workspace
+    const homeDir = (await ssh.exec('echo $HOME')).stdout.trim();
     const { bootstrapWorker } = await import('../../deploy/worker.js');
     await bootstrapWorker(ssh, {
       name,
@@ -660,12 +662,12 @@ async function workerWizard(): Promise<void> {
     if (setupTelegram) {
       (openclawConfig as any).channels = { telegram: { enabled: true, token: telegramToken } };
     }
-    await ssh.putContent(JSON.stringify(openclawConfig, null, 2) + '\n', '~/.openclaw/openclaw.json');
+    await ssh.putContent(JSON.stringify(openclawConfig, null, 2) + '\n', `${homeDir}/.openclaw/openclaw.json`);
 
     // Write .env
     console.log('  Writing .env...');
     const envKey = apiProvider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
-    await ssh.putContent(envKey + '=' + apiKey + '\n', '~/.openclaw/.env');
+    await ssh.putContent(envKey + '=' + apiKey + '\n', `${homeDir}/.openclaw/.env`);
 
     // Register
     const capsArray = capabilities.split(',').map(c => c.trim());
