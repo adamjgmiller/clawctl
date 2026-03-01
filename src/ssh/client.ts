@@ -43,6 +43,7 @@ export class SshClient {
   }
 
   disconnect(): void {
+    this.sftpChannel = null;
     this.ssh.dispose();
   }
 
@@ -64,8 +65,17 @@ export class SshClient {
     }
   }
 
+  private sftpChannel: any = null;
+
+  private async getSftp(): Promise<any> {
+    if (!this.sftpChannel) {
+      this.sftpChannel = await this.ssh.requestSFTP();
+    }
+    return this.sftpChannel;
+  }
+
   async putContent(content: string, remotePath: string): Promise<void> {
-    const sftp = await this.ssh.requestSFTP();
+    const sftp = await this.getSftp();
     await new Promise<void>((resolve, reject) => {
       sftp.writeFile(remotePath, content, (err: Error | undefined) => {
         if (err) reject(err);
