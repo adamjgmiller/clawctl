@@ -76,6 +76,7 @@ async function orchestratorWizard(): Promise<void> {
   let sshKey: string;
   let awsInstanceId: string | undefined;
   let awsRegion: string | undefined;
+  let tailscaleApiKey: string | undefined;
 
   if (serverSource === 'aws') {
     console.log('');
@@ -133,6 +134,12 @@ async function orchestratorWizard(): Promise<void> {
       message: 'Tailscale auth key (from admin.tailscale.com/keys):',
       default: defaults.tailscaleAuthKey,
       validate: (v: string) => v.startsWith('tskey-') || 'Should start with tskey-...',
+    });
+
+    const tailscaleApiKey = await input({
+      message: 'Tailscale API key (for network commands, from admin.tailscale.com/keys):',
+      default: defaults.tailscaleApiKey,
+      validate: (v: string) => v.startsWith('tskey-api-') || 'Should start with tskey-api-...',
     });
 
     console.log('');
@@ -258,6 +265,11 @@ async function orchestratorWizard(): Promise<void> {
     sshKey = await input({
       message: 'Path to your SSH private key:',
       default: '~/.ssh/id_ed25519',
+    });
+
+    tailscaleApiKey = await input({
+      message: 'Tailscale API key (for network commands, optional):',
+      default: defaults.tailscaleApiKey || '',
     });
   }
 
@@ -404,6 +416,7 @@ async function orchestratorWizard(): Promise<void> {
     const envLines = [];
     if (apiProvider === 'anthropic') envLines.push(`ANTHROPIC_API_KEY=${apiKey}`);
     else envLines.push(`OPENAI_API_KEY=${apiKey}`);
+    if (tailscaleApiKey) envLines.push(`TAILSCALE_API_KEY=${tailscaleApiKey}`);
     await ssh.putContent(envLines.join('\n') + '\n', '~/.openclaw/.env');
 
     // Register in fleet
@@ -429,6 +442,7 @@ async function orchestratorWizard(): Promise<void> {
       awsAccessKeyId: serverSource === 'aws' ? process.env.AWS_ACCESS_KEY_ID : defaults.awsAccessKeyId,
       awsSecretAccessKey: serverSource === 'aws' ? process.env.AWS_SECRET_ACCESS_KEY : defaults.awsSecretAccessKey,
       awsRegion: awsRegion || defaults.awsRegion,
+      tailscaleApiKey: tailscaleApiKey || defaults.tailscaleApiKey,
     });
     console.log('');
     console.log('  Agent ID:  ' + agent.id);

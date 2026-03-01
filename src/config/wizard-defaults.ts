@@ -13,6 +13,7 @@ export interface WizardDefaults {
   keyPair?: string;
   sshKeyPath?: string;
   tailscaleAuthKey?: string;
+  tailscaleApiKey?: string;
   operatorName?: string;
   operatorEmail?: string;
   operatorTimezone?: string;
