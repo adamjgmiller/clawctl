@@ -43,8 +43,8 @@ export async function bootstrapOrchestrator(
   onStep?: (msg: string) => void,
 ): Promise<void> {
   const log = onStep ?? (() => {});
-  const homeDir = await ssh.exec('echo $HOME');
-  const workspace = `${homeDir.stdout.trim()}/.openclaw/workspace`;
+  const homeDir = (await ssh.exec('echo $HOME')).stdout.trim();
+  const workspace = `${homeDir}/.openclaw/workspace`;
 
   log('Creating workspace directories...');
   await ssh.exec(`mkdir -p ${workspace}/memory ${workspace}/skills ${workspace}/projects`);
@@ -82,12 +82,12 @@ export async function bootstrapOrchestrator(
 
   // Copy clawctl agents registry
   log('Syncing fleet registry...');
-  await ssh.exec('mkdir -p ~/.clawctl');
+  await ssh.exec(`mkdir -p ${homeDir}/.clawctl`);
   const { readFile: readLocalFile } = await import('node:fs/promises');
   const { homedir } = await import('node:os');
   try {
     const agentsJson = await readLocalFile(join(homedir(), '.clawctl', 'agents.json'), 'utf-8');
-    await ssh.putContent(agentsJson, '~/.clawctl/agents.json');
+    await ssh.putContent(agentsJson, `${homeDir}/.clawctl/agents.json`);
   } catch {
     log('  (no local agents.json to sync)');
   }
@@ -96,7 +96,7 @@ export async function bootstrapOrchestrator(
   try {
     const { homedir: hd } = await import('node:os');
     const policyJson = await readLocalFile(join(hd(), '.clawctl', 'policy.json'), 'utf-8');
-    await ssh.putContent(policyJson, '~/.clawctl/policy.json');
+    await ssh.putContent(policyJson, `${homeDir}/.clawctl/policy.json`);
     log('Synced policy rules');
   } catch {
     log('  (no policy.json to sync)');
@@ -107,10 +107,10 @@ export async function bootstrapOrchestrator(
   const skillDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'skill');
   try {
     const skillFiles = await readdir(skillDir);
-    await ssh.exec('mkdir -p ~/.openclaw/workspace/skills/clawctl');
+    await ssh.exec(`mkdir -p ${workspace}/skills/clawctl`);
     for (const file of skillFiles) {
       const content = await readFile(join(skillDir, file), 'utf-8');
-      await ssh.putContent(content, `~/.openclaw/workspace/skills/clawctl/${file}`);
+      await ssh.putContent(content, `${workspace}/skills/clawctl/${file}`);
     }
     log('  Installed clawctl skill files');
   } catch {
